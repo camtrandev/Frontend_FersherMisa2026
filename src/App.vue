@@ -1,11 +1,23 @@
-<script setup></script>
-
 <template>
-  <h1>You did it!</h1>
-  <p>
-    Visit <a href="https://vuejs.org/" target="_blank" rel="noopener">vuejs.org</a> to read the
-    documentation
-  </p>
+  <DefaultLayout />
 </template>
 
-<style scoped></style>
+<script setup>
+import DefaultLayout from '@/layouts/DefaultLayout.vue'
+</script>
+
+<style>
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden; /* Cấm trình duyệt cuộn toàn trang */
+}
+
+#app {
+    width: 100%;
+    height: 100vh;
+    overflow: hidden; /* Ép thẻ gốc của Vue không được tràn */
+}
+</style>
