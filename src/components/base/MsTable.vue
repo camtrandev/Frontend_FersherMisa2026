@@ -4,15 +4,13 @@
             <thead>
                 <tr>
                     <th class="th-checkbox text-center">
-                        <MsCheckbox />
+                        <MsCheckbox :modelValue="isAllSelected" @update:modelValue="toggleSelectAll" />
                     </th>
 
                     <th v-for="(col, index) in columns" :key="index" :class="[col.alignClass, 'th-column-group']"
                         :style="{ minWidth: col.width, width: col.width }">
 
-                        <div class="th-content">
-                            {{ col.label }}
-                        </div>
+                        <div class="th-content">{{ col.label }}</div>
 
                         <div v-if="col.filterable" class="icon-filter-trigger m-icon mi_icon_filter_dropdown"
                             :class="{ 'active': activeFilterCol === col.field }" @click.stop="toggleFilter(col.field)">
@@ -29,12 +27,34 @@
             <tbody>
                 <tr v-for="(row, rowIndex) in data" :key="rowIndex">
                     <td class="td-checkbox text-center">
-                        <MsCheckbox />
+                        <MsCheckbox :modelValue="selectedIds.includes(row.employeeId)"
+                            @update:modelValue="toggleSelectRow(row.employeeId, $event)" />
                     </td>
 
                     <td v-for="col in columns" :key="col.field" :class="col.alignClass">
                         <template v-if="col.type === 'checkbox'">
                             <input type="checkbox" :checked="row[col.field]" disabled />
+                        </template>
+
+                        <template v-else-if="col.field === 'gender'">
+                            {{ row[col.field] === 0 ? 'Nữ' : (row[col.field] === 1 ? 'Nam' : 'Khác') }}
+                        </template>
+
+                        <template v-else-if="col.field === 'agreedSalary' || col.field === 'insuranceSalary'">
+                            {{ formatCurrency(row[col.field]) }}
+                        </template>
+
+                        <template
+                            v-else-if="col.field === 'dateOfBirth' || col.field === 'issueDate' || col.field === 'createdDate' || col.field === 'modifiedDate'">
+                            {{ formatDate(row[col.field]) }}
+                        </template>
+
+                        <template v-else-if="col.field === 'contractType'">
+                            {{ contractTypes[row[col.field]] || 'Chưa xác định' }}
+                        </template>
+
+                        <template v-else-if="col.field === 'status'">
+                            {{ row[col.field] === 1 ? 'Đang sử dụng' : 'Ngừng sử dụng' }}
                         </template>
 
                         <template v-else>
@@ -47,16 +67,19 @@
                             <span class="action-btn" @click.stop="handleEdit(row)">Sửa</span>
 
                             <div class="m-icon mi_icon_chevron_down_blue btn-dropdown-action"
-                                @click.stop="toggleDropdown(rowIndex)"></div>
+                                @click.stop="toggleDropdown(rowIndex, $event)"></div>
                         </div>
 
-                        <ul v-if="activeDropdown === rowIndex" class="dropdown-menu">
+                        <ul v-if="activeDropdown === rowIndex" class="dropdown-menu" :class="{ 'dropup': isDropUp }">
                             <li class="dropdown-item" @click.stop="handleAction('Nhân bản', row)">Nhân bản</li>
                             <li class="dropdown-item" @click.stop="handleAction('Xóa', row)">Xóa</li>
-                            <li class="dropdown-item" @click.stop="handleAction('Ngừng sử dụng', row)">Ngừng sử dụng
-                            </li>
+                            <li class="dropdown-item" @click.stop="handleAction('Ngừng sử dụng', row)">Ngừng sử dụng </li>
                         </ul>
                     </td>
+                </tr>
+
+                <tr class="empty-spacer-row">
+                    <td :colspan="columns.length + 2"></td>
                 </tr>
             </tbody>
         </table>
@@ -64,95 +87,119 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+// BỔ SUNG: Import thêm 'computed' từ 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import MsCheckbox from './MsCheckbox.vue';
-import MsTableFilter from './MsTableFilter.vue'; // IMPORT COMPONENT FILTER
+import MsTableFilter from './MsTableFilter.vue';
 
 const props = defineProps({
     columns: { type: Array, required: true },
-    data: { type: Array, required: true }
+    data: { type: Array, required: true },
+    // nhận danh sách id chọn ngoài màn hình 
+    selectedIds: { type: Array, default: () => [] }
 });
 
-const emit = defineEmits(['filter-data', 'onDeleteRow', 'onEditRow']);
+// Định nghĩa danh sách loại hợp đồng
+const contractTypes = {
+    1: 'Không cư trú',
+    2: 'Cư trú và không ký HĐLĐ/HĐLĐ dưới 3 tháng',
+    3: 'Cư trú và có HĐLĐ từ 3 tháng trở lên'
+};
 
-// ==========================================
-// LOGIC CHO CHỨC NĂNG DROPDOWN (BÊN PHẢI)
-// ==========================================
+const emit = defineEmits(['filter-data', 'onDeleteRow', 'onEditRow', 'update:selectedIds', 'onCloneRow', 'onUpdateStatusRow']);
+
 const activeDropdown = ref(null);
+const activeFilterCol = ref(null);
 
-const toggleDropdown = (index) => {
+// Thêm biến kiểm soát hướng mở của Dropdown
+const isDropUp = ref(false);
+
+// BỔ SUNG: Hàm tính toán xem ô Checkbox trên cùng có được tích hay không
+const isAllSelected = computed(() => {
+    // Tích khi mảng data có dữ liệu VÀ số lượng ID được chọn bằng đúng số lượng dòng hiển thị
+    return props.data.length > 0 && props.selectedIds.length === props.data.length;
+});
+
+const toggleDropdown = (index, event) => {
     if (activeDropdown.value === index) {
         activeDropdown.value = null;
     } else {
         activeDropdown.value = index;
+
+        // Tính toán khoảng cách từ con trỏ chuột đến đáy màn hình
+        // Nếu khoảng cách < 150px (tức là menu có nguy cơ bị che), ta hất nó lên trên
+        if (window.innerHeight - event.clientY < 150) {
+            isDropUp.value = true;
+        } else {
+            isDropUp.value = false;
+        }
     }
 };
 
-const closeDropdown = () => {
-    activeDropdown.value = null;
-};
 
-const handleEdit = (row) => {
-    closeDropdown();
-    emit('onEditRow', row); // Phát tín hiệu lên cha kèm theo dữ liệu của nhân viên
-    console.log("MỞ FORM SỬA CHO DỮ LIỆU:", row);
-};
-
+const closeDropdown = () => { activeDropdown.value = null; };
+const handleEdit = (row) => { closeDropdown(); emit('onEditRow', row); };
 const handleAction = (actionName, row) => {
     closeDropdown();
+    if (actionName === 'Xóa') emit('onDeleteRow', row);
+    else if (actionName === 'Nhân bản') emit('onCloneRow', row);
+    else if (actionName === 'Ngừng sử dụng') emit('onUpdateStatusRow', { row, status: 0 });
+};
 
-    // THÊM ĐOẠN IF NÀY VÀO:
-    if (actionName === 'Xóa') {
-        emit('onDeleteRow', row); // Phát sự kiện lên cha, truyền theo dữ liệu dòng đang chọn
+// Hàm chạy khi click vào Checkbox trên cùng (Header)
+const toggleSelectAll = (isChecked) => {
+    if (isChecked) {
+        // Tích chọn: Lấy toàn bộ employeeId của trang hiện tại bắn ra ngoài
+        const allIds = props.data.map(row => row.employeeId);
+        emit('update:selectedIds', allIds);
     } else {
-        console.log(`Thực hiện tính năng [${actionName}] cho:`, row);
+        // Bỏ chọn: Bắn ra mảng rỗng
+        emit('update:selectedIds', []);
     }
 };
 
-
-// ==========================================
-// LOGIC CHO CHỨC NĂNG LỌC CỘT (TRÊN THEAD)
-// ==========================================
-// Lưu trữ tên field của cột đang được mở bảng lọc
-const activeFilterCol = ref(null);
-
-const toggleFilter = (field) => {
-    activeFilterCol.value = activeFilterCol.value === field ? null : field;
+// Hàm chạy khi click vào Checkbox của từng dòng
+const toggleSelectRow = (id, isChecked) => {
+    const newSelected = [...props.selectedIds];
+    if (isChecked) {
+        if (!newSelected.includes(id)) newSelected.push(id);
+    } else {
+        const index = newSelected.indexOf(id);
+        if (index !== -1) newSelected.splice(index, 1);
+    }
+    emit('update:selectedIds', newSelected);
 };
 
-const closeFilter = () => {
-    activeFilterCol.value = null;
+const toggleFilter = (field) => { activeFilterCol.value = (activeFilterCol.value === field) ? null : field; };
+const closeFilter = () => { activeFilterCol.value = null; };
+const handlePassFilter = (filterData) => { emit('filter-data', filterData); };
+const handlePassClear = (field) => { emit('filter-data', { field: field, value: '' }); };
+
+const closeAllPopovers = () => { closeDropdown(); closeFilter(); };
+onMounted(() => window.addEventListener('click', closeAllPopovers));
+onUnmounted(() => window.removeEventListener('click', closeAllPopovers));
+
+// Hàm format số có dấu phẩy ngăn cách hàng nghìn
+const formatCurrency = (value) => {
+    if (value === null || value === undefined || value === '') return '';
+    return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 };
 
-// Đẩy dữ liệu lọc từ MsTableFilter.vue lên cha (EmployeeList.vue)
-const handlePassFilter = (filterData) => {
-    emit('filter-data', filterData);
+// Hàm format ngày tháng từ ISO (YYYY-MM-DD...) sang dd/MM/yyyy
+const formatDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString; // Nếu không phải ngày hợp lệ, giữ nguyên
+
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+
+    return `${day}/${month}/${year}`;
 };
-
-// Đẩy tín hiệu xóa bộ lọc từ MsTableFilter.vue lên cha
-const handlePassClear = (field) => {
-    emit('filter-data', { field: field, value: '' });
-};
-
-// ==========================================
-// SỰ KIỆN CLICK NGOÀI MÀN HÌNH CHUNG
-// ==========================================
-const closeAllPopovers = () => {
-    closeDropdown();
-    closeFilter();
-};
-
-onMounted(() => {
-    window.addEventListener('click', closeAllPopovers);
-});
-
-onUnmounted(() => {
-    window.removeEventListener('click', closeAllPopovers);
-});
 </script>
 
 <style scoped>
-/* Box chứa table để xử lý scroll */
 .m-table-scroller {
     flex: 1;
     min-height: 0;
@@ -173,7 +220,21 @@ onUnmounted(() => {
     white-space: nowrap;
 }
 
-/* --- 1. XỬ LÝ THEAD & STICKY HEADER --- */
+/* HÀNG TRỐNG 20PX */
+.empty-spacer-row {
+    height: 50px;
+    background-color: #fff;
+}
+
+.empty-spacer-row td {
+    border: none !important;
+}
+
+.m-table tbody tr.empty-spacer-row:hover td {
+    background-color: #fff !important;
+}
+
+/* --- CSS CŨ (GIỮ NGUYÊN) --- */
 .m-table thead th {
     position: sticky;
     top: 0;
@@ -183,26 +244,17 @@ onUnmounted(() => {
     height: 29px;
     border-right: 1px solid #c7c7c7;
     border-bottom: 1px solid #c7c7c7;
-    font-weight: 700;
-    text-transform: uppercase;
-    font-size: 12px;
+    font-weight: 560;
+    font-size: 14px;
     cursor: pointer;
-
-    font-size: 12px;
-    text-transform: var(--grid-header-text-transform);
     align-items: center;
-    cursor: pointer;
     padding-right: 12px;
 
 }
 
-/* BỔ SUNG CSS CHO CHỨC NĂNG LỌC TẠI THEAD 
-*/
 .th-column-group {
     position: relative;
-    /* Bắt buộc để đặt popover và icon filter */
     padding-right: 24px !important;
-    /* Dành chỗ trống cho icon mũi tên không đè vào chữ */
 }
 
 .th-content {
@@ -219,24 +271,15 @@ onUnmounted(() => {
     height: 16px;
     cursor: pointer;
     display: none;
-    /* Mặc định ẩn, chỉ hiện khi hover */
-    background-color: transparent;
-    /* Nền trong suốt */
-
-    /* Thiết lập icon mũi tên (Sử dụng CSS sprite của bạn, sửa lại tọa độ nếu chưa chuẩn) */
     background: url(../../assets/icons/Sprites-7ba27b53.svg) no-repeat;
     background-position: -1686px -564px;
-    /* Tọa độ ví dụ, bạn hãy sửa lại theo đúng icon mũi tên xám */
 }
 
-/* Hiển thị icon mũi tên khi trỏ chuột vào cột HOẶC khi cột đó đang mở bộ lọc */
 .th-column-group:hover .icon-filter-trigger,
 .icon-filter-trigger.active {
     display: block;
 }
 
-
-/* --- 2. XỬ LÝ TBODY & ROWS --- */
 .m-table tbody td {
     padding: 0 10px;
     height: 33px;
@@ -246,7 +289,6 @@ onUnmounted(() => {
     transition: background-color 0.1s;
 }
 
-/* --- 3. CỐ ĐỊNH CỘT TRÁI - CHECKBOX --- */
 .th-checkbox,
 .td-checkbox {
     position: sticky;
@@ -266,7 +308,6 @@ onUnmounted(() => {
     z-index: 3 !important;
 }
 
-/* --- 4. CỐ ĐỊNH CỘT PHẢI - CHỨC NĂNG --- */
 .th-action,
 .td-action {
     position: sticky;
@@ -286,7 +327,6 @@ onUnmounted(() => {
     z-index: 3 !important;
 }
 
-/* --- 5. HIỆU ỨNG HOVER --- */
 .m-table tbody tr:hover td {
     background-color: #f3f8f8;
 }
@@ -300,7 +340,6 @@ onUnmounted(() => {
     text-align: center;
 }
 
-/* --- CỤM NÚT CHỨC NĂNG VÀ MENU DROPDOWN --- */
 .action-group {
     display: flex;
     align-items: center;
@@ -322,7 +361,6 @@ onUnmounted(() => {
     background-position: -896px -359px;
 }
 
-/* --- BOX MENU DROPDOWN HIỂN THỊ --- */
 .dropdown-menu {
     position: absolute;
     top: 90%;
@@ -337,6 +375,13 @@ onUnmounted(() => {
     min-width: 120px;
     text-align: left;
     z-index: 999;
+}
+
+/* THÊM ĐOẠN NÀY DÀNH RIÊNG CHO CÁC DÒNG CUỐI BẢNG */
+.dropdown-menu.dropup {
+    top: auto;        /* Hủy bỏ neo phía trên */
+    bottom: 90%;      /* Neo menu mọc ngược từ dưới lên */
+    box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.1); /* Đảo ngược bóng đổ cho đẹp */
 }
 
 .dropdown-item {

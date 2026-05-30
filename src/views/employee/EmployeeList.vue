@@ -9,12 +9,18 @@
                 </a>
             </div>
             <div class="m-page-actions">
-                <div class="m-btn-split">
+                <div class="m-btn-split" style="position: relative;">
                     <MsButton class="m-btn-main" @click="openAddForm">Thêm</MsButton>
                     <div class="m-btn-divider"></div>
-                    <MsButton class="m-btn-dropdown-icon">
+
+                    <button class="m-btn-dropdown-icon" @click="showAddMenu = !showAddMenu" style="cursor: pointer;">
                         <div class="m-icon mi_icon_chevron_down_white"></div>
-                    </MsButton>
+                    </button>
+
+                    <ul v-if="showAddMenu" class="m-dropdown-menu"
+                        style="position: absolute; top: calc(100% + 4px); right: 0; z-index: 99; min-width: 150px; background: #fff; border: 1px solid #babec5; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 4px; padding: 4px 0; margin: 0; list-style: none;">
+                        <li class="dropdown-item" @click="openImportExcel">Nhập từ Excel</li>
+                    </ul>
                 </div>
             </div>
         </div>
@@ -26,297 +32,472 @@
                         <div class="m-icon mi_icon_arrow_check"></div>
                     </div>
 
-                    <MsButton type="secondary" class="btn-dropdown m-btn-util">
-                        <span>Thực hiện hàng loạt</span>
-                        <div class="m-icon mi_icon_chevron_down"></div>
-                    </MsButton>
+                    <div class="batch-action-container" style="position: relative;">
+                        <button class="btn-dropdown m-btn-util"
+                            :class="{ 'active-batch': selectedEmployeeIds.length >= 2 }"
+                            :disabled="selectedEmployeeIds.length < 2" @click="showBatchMenu = !showBatchMenu">
+                            <span>Thực hiện hàng loạt</span>
+                            <div class="m-icon mi_icon_chevron_down"></div>
+                        </button>
+
+                        <ul v-if="showBatchMenu && selectedEmployeeIds.length >= 2" class="m-dropdown-menu"
+                            style="position: absolute; top: calc(100% + 4px); left: 0; z-index: 99; min-width: 160px; background: #fff; border: 1px solid #babec5; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 4px; padding: 4px 0; margin: 0; list-style: none;">
+                            <li class="dropdown-item" @click="confirmBatchAction('batch_delete')">Xóa hàng loạt</li>
+                            <li class="dropdown-item" @click="confirmBatchAction('stop_using')">Ngừng sử dụng hàng loạt
+                            </li>
+                            <li class="dropdown-item" @click="confirmBatchAction('start_using')">Sử dụng hàng loạt</li>
+                        </ul>
+                    </div>
                 </div>
 
                 <div class="m-toolbar-right">
                     <div class="m-search-box">
-                        <MsInput placeholder="Tìm theo mã, tên nhân viên" iconRight="m-icon mi_icon_search" />
+                        <MsInput v-model="searchQuery" placeholder="Tìm theo mã, tên nhân viên"
+                            iconRight="m-icon mi_icon_search" />
                     </div>
 
-                    <div class="m-toolbar-icon" title="Lấy lại dữ liệu">
+                    <div class="m-toolbar-icon" title="Lấy lại dữ liệu" @click="loadData">
                         <div class="m-icon mi_icon_refresh"></div>
                     </div>
-                    <div class="m-toolbar-icon" title="Xuất ra Excel">
+                    <div class="m-toolbar-icon" title="Xuất ra Excel" @click="handleExportExcel">
                         <div class="m-icon mi_icon_excel"></div>
                     </div>
-                    <div class="m-toolbar-icon" title="Tùy chỉnh giao diện">
+                    <div class="m-toolbar-icon" title="Tùy chỉnh giao diện" @click="showColumnSetting = true">
                         <div class="m-icon mi_icon_setting"></div>
                     </div>
+
+                    <ColumnSetting :isVisible="showColumnSetting" :columns="tableColumns"
+                        @close="showColumnSetting = false" @save="handleApplyColumnSettings" />
                 </div>
             </div>
 
             <div class="m-table-container">
-                <MsTable :columns="tableColumns" :data="displayData" @filter-data="onApplyFilter"
-                    @onDeleteRow="openDeleteDialog" @onEditRow="openEditForm" />
+                <MsTable :columns="visibleColumns" :data="displayData" v-model:selectedIds="selectedEmployeeIds"
+                    @filter-data="onApplyFilter" @onDeleteRow="openDeleteDialog" @onEditRow="openEditForm"
+                    @onCloneRow="openCloneForm" @onUpdateStatusRow="openUpdateStatusDialog" />
 
                 <EmployeeForm :isVisible="showEmployeeForm" :editData="currentEmployeeData" @close="closeEmployeeForm"
-                    @save="handleSaveEmployee" />
+                    @save="handleSaveEmployee" @saveSuccess="loadData" />
 
                 <DialogConfirm :isVisible="showDeleteDialog" @close="showDeleteDialog = false"
-                    @confirm="handleConfirmDelete">
-                    Bạn có thực sự muốn xóa Nhân viên &lt;{{ employeeToDelete?.employeeCode }}&gt; không?
+                    @confirm="executeConfirmedAction">
+
+                    <template v-if="confirmActionType === 'single_delete'">
+                        Bạn có thực sự muốn xóa Nhân viên &lt;{{ employeeToDelete?.employeeCode }}&gt; không?
+                    </template>
+
+                    <template v-else-if="confirmActionType === 'batch_delete'">
+                        Bạn có thực sự muốn xóa <b>{{ selectedEmployeeIds.length }}</b> nhân viên đã chọn không?
+                    </template>
+
+                    <template v-else-if="confirmActionType === 'single_stop_using'">
+                        Bạn có thực sự muốn <b>ngừng sử dụng</b> Nhân viên &lt;{{ employeeToDelete?.employeeCode }}&gt;
+                        không?
+                    </template>
+
+                    <template v-else-if="confirmActionType === 'single_start_using'">
+                        Bạn có thực sự muốn <b>sử dụng</b> lại Nhân viên &lt;{{ employeeToDelete?.employeeCode }}&gt;
+                        không?
+                    </template>
+                    <template v-else-if="confirmActionType === 'stop_using'">
+                        Bạn có thực sự muốn <b>ngừng sử dụng {{ selectedEmployeeIds.length }}</b> nhân viên đã chọn
+                        không?
+                    </template>
+
+                    <template v-else-if="confirmActionType === 'start_using'">
+                        Bạn có thực sự muốn <b>sử dụng {{ selectedEmployeeIds.length }}</b> nhân viên đã chọn không?
+                    </template>
                 </DialogConfirm>
 
-                <MsPagination class="m-pagination-fixed" :totalRecords="displayData.length" :pageSize="200"
-                    :currentPage="1" />
+                <MsPagination class="m-pagination-fixed" :totalRecords="totalRecords" :pageSize="pageSize"
+                    :currentPage="currentPage" @update:currentPage="handlePageChange"
+                    @update:pageSize="handlePageSizeChange" />
             </div>
         </div>
     </div>
+
+    <ImportExcelDialog :isVisible="showImportExcel" @close="showImportExcel = false" @importSuccess="loadData" />
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
+import { storeToRefs } from 'pinia';
+import { useEmployeeStore } from '../../stores/Employee.store';
+
 // Import các Base Component
 import MsButton from '../../components/base/MsButton.vue';
 import MsInput from '../../components/base/MsInput.vue';
 import MsTable from '../../components/base/MsTable.vue';
-import MsPagination from '../../components/base/MsPagination.vue'
-import DialogConfirm from '../../components/base/DialogConfirm.vue'
-import EmployeeForm from '../employee/EmployeeForm.vue'
+import MsPagination from '../../components/base/MsPagination.vue';
+import DialogConfirm from '../../components/base/DialogConfirm.vue';
+import EmployeeForm from '../employee/EmployeeForm.vue';
+import ColumnSetting from '../../components/base/ColumnSetting.vue'
+import ImportExcelDialog from '../../components/Excel/ImportExcelDialog.vue';
 
-const showDeleteDialog = ref(false); // Trạng thái ẩn/hiện dialog
-const employeeToDelete = ref(null);  // Lưu thông tin nhân viên đang chuẩn bị xóa
+// --- KHỞI TẠO STORE & GIỮ TÍNH PHẢN XẠ (REACTIVITY) ---
+const employeeStore = useEmployeeStore();
+const { employees, totalRecords, isLoading } = storeToRefs(employeeStore);
 
-const showEmployeeForm = ref(false);   // Trạng thái ẩn/hiện form
-const currentEmployeeData = ref(null); // Dữ liệu nhân viên đang được chọn để sửa (nếu có)
+// -- trang thái ImportExcel --- 
+const showAddMenu = ref(false);
+const showImportExcel = ref(false);
+
+const openImportExcel = () => {
+    showAddMenu.value = false; // Đóng cái menu nhỏ lại
+    showImportExcel.value = true; // Bật màn hình Excel to lên
+};
+
+// Đóng menu "Nhập từ Excel" nếu click ra ngoài khoảng trống màn hình
+onMounted(() => {
+    window.addEventListener('click', (e) => {
+        if (!e.target.closest('.m-btn-split')) {
+            showAddMenu.value = false;
+        }
+    });
+});
+
+// --- CÁC BIẾN TRẠNG THÁI UI VÀ PHÂN TRANG ---
+const showDeleteDialog = ref(false);
+const employeeToDelete = ref(null);
+const showEmployeeForm = ref(false);
+const currentEmployeeData = ref(null);
+const showColumnSetting = ref(false);
+
+const mockData = ref([]);
+
+const currentPage = ref(1);
+const pageSize = ref(20);
+const searchQuery = ref('');
+const activeFilters = ref({});
+let searchTimeout = null;
 
 const tableColumns = ref([
     { label: 'Mã nhân viên', field: 'employeeCode', width: '130px', alignClass: 'text-left', filterable: true },
-    { label: 'Tên nhân viên', field: 'employeeName', width: '220px', alignClass: 'text-left', filterable: true },
+    { label: 'Tên nhân viên', field: 'fullName', width: '220px', alignClass: 'text-left', filterable: true },
     { label: 'Mã số thuế', field: 'taxCode', width: '130px', alignClass: 'text-left', filterable: true },
     { label: 'Chức danh', field: 'positionName', width: '150px', alignClass: 'text-left', filterable: true },
     { label: 'Mã đơn vị', field: 'departmentCode', width: '120px', alignClass: 'text-left', filterable: true },
     { label: 'Tên đơn vị', field: 'departmentName', width: '200px', alignClass: 'text-left', filterable: true },
-    { label: 'Số tài khoản', field: 'bankAccount', width: '150px', alignClass: 'text-left', filterable: true },
+    { label: 'Số tài khoản', field: 'bankAccountNumber', width: '150px', alignClass: 'text-left', filterable: true },
     { label: 'Tên ngân hàng', field: 'bankName', width: '180px', alignClass: 'text-left', filterable: true },
-    { label: 'Trạng thái', field: 'status', width: '150px', alignClass: 'text-left', filterable: true },
-    { label: 'Số điện thoại di động', field: 'phoneNumber', width: '160px', alignClass: 'text-left', filterable: true },
-    { label: 'Giới tính', field: 'genderName', width: '100px', alignClass: 'text-left' },
+    { label: 'Số điện thoại di động', field: 'mobilePhoneNumber', width: '160px', alignClass: 'text-left', filterable: true },
+    { label: 'Giới tính', field: 'gender', width: '100px', alignClass: 'text-left' },
     { label: 'Ngày sinh', field: 'dateOfBirth', width: '120px', alignClass: 'text-center' },
     { label: 'Số hộ chiếu', field: 'passportNumber', width: '150px', alignClass: 'text-left' },
     { label: 'Số CCCD/ CMND', field: 'identityNumber', width: '160px', alignClass: 'text-left', filterable: true },
-    { label: 'Ngày cấp', field: 'identityDate', width: '120px', alignClass: 'text-center' },
-    { label: 'Nơi cấp', field: 'identityPlace', width: '200px', alignClass: 'text-left', filterable: true },
+    { label: 'Ngày cấp', field: 'issueDate', width: '120px', alignClass: 'text-center' },
+    { label: 'Nơi cấp', field: 'issuePlace', width: '200px', alignClass: 'text-left', filterable: true },
     { label: 'Là khách hàng', field: 'isCustomer', width: '130px', alignClass: 'text-center', type: 'checkbox' },
-    { label: 'Là nhà cung cấp', field: 'isVendor', width: '140px', alignClass: 'text-center', type: 'checkbox' },
+    { label: 'Là nhà cung cấp', field: 'isSupplier', width: '140px', alignClass: 'text-center', type: 'checkbox' },
     { label: 'Ngày tạo', field: 'createdDate', width: '120px', alignClass: 'text-center' },
     { label: 'Người tạo', field: 'createdBy', width: '150px', alignClass: 'text-left' },
     { label: 'Ngày sửa', field: 'modifiedDate', width: '120px', alignClass: 'text-center' },
-    { label: 'Người sửa', field: 'modifiedBy', width: '150px', alignClass: 'text-left' }
+    { label: 'Người sửa', field: 'modifiedBy', width: '150px', alignClass: 'text-left' },
+    { label: 'Trạng thái', field: 'status', width: '150px', alignClass: 'text-left', filterable: true }
 ]);
 
-// Dữ liệu mock trích xuất chính xác từ hình ảnh
-const mockData = ref([
-    { employeeCode: 'BQH', employeeName: 'Bùi Quý Hợp', taxCode: '', positionName: 'Công nhân', departmentCode: 'PKD', departmentName: 'Phòng kinh doanh', bankAccount: '', bankName: '', status: 'Ngừng sử dụng', phoneNumber: '0912345678', genderName: 'Nam', dateOfBirth: '15/05/1990', passportNumber: '', identityNumber: '001090123456', identityDate: '10/10/2015', identityPlace: 'Hà Nội', isCustomer: false, isVendor: false, createdDate: '01/01/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'BTKP', employeeName: 'Bùi Thị Kim Phượng', taxCode: '0102345678', positionName: 'Thủ kho', departmentCode: 'VP', departmentName: 'Văn phòng', bankAccount: '190333444555', bankName: 'Techcombank', status: 'Đang sử dụng', phoneNumber: '0988777666', genderName: 'Nữ', dateOfBirth: '22/11/1995', passportNumber: 'B1234567', identityNumber: '030195001234', identityDate: '05/06/2018', identityPlace: 'Hà Nội', isCustomer: true, isVendor: true, createdDate: '15/02/2026', createdBy: 'Admin', modifiedDate: '20/02/2026', modifiedBy: 'Admin' },
-    { employeeCode: 'DDD', employeeName: 'Đinh Đăng Đại', taxCode: '', positionName: 'Lái xe', departmentCode: 'PKD', departmentName: 'Phòng kinh doanh', bankAccount: '', bankName: '', status: 'Ngừng sử dụng', phoneNumber: '', genderName: 'Nam', dateOfBirth: '10/02/1988', passportNumber: '', identityNumber: '034088005678', identityDate: '', identityPlace: '', isCustomer: false, isVendor: true, createdDate: '23/05/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'DHSANG', employeeName: 'Đinh Hữu Sang', taxCode: '0103456789', positionName: 'Công nhân', departmentCode: 'PKD', departmentName: 'Phòng kinh doanh', bankAccount: '0123456789', bankName: 'Vietcombank', status: 'Ngừng sử dụng', phoneNumber: '0909112233', genderName: 'Nam', dateOfBirth: '05/09/1992', passportNumber: '', identityNumber: '', identityDate: '', identityPlace: '', isCustomer: false, isVendor: false, createdDate: '10/03/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'DTH', employeeName: 'Đinh Thị Hồng', taxCode: '0104567890', positionName: 'Giám đốc', departmentCode: 'VP', departmentName: 'Văn phòng', bankAccount: '987654321', bankName: 'MB Bank', status: 'Đang sử dụng', phoneNumber: '0977665544', genderName: 'Nữ', dateOfBirth: '12/12/1985', passportNumber: 'C7654321', identityNumber: '001185009876', identityDate: '20/11/2020', identityPlace: 'Cục CSQLHC', isCustomer: false, isVendor: false, createdDate: '01/01/2025', createdBy: 'Admin', modifiedDate: '10/05/2026', modifiedBy: 'Admin' },
-    { employeeCode: 'DTH1', employeeName: 'Đinh Thị Hương', taxCode: '', positionName: 'Công nhân', departmentCode: 'PKD', departmentName: 'Phòng kinh doanh', bankAccount: '', bankName: '', status: 'Ngừng sử dụng', phoneNumber: '0966554433', genderName: 'Nữ', dateOfBirth: '', passportNumber: '', identityNumber: '', identityDate: '', identityPlace: '', isCustomer: false, isVendor: false, createdDate: '15/04/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'DTHUE', employeeName: 'Đinh Thị Huệ', taxCode: '0105678901', positionName: 'Công nhân', departmentCode: 'PKD', departmentName: 'Phòng kinh doanh', bankAccount: '1122334455', bankName: 'BIDV', status: 'Ngừng sử dụng', phoneNumber: '', genderName: 'Nữ', dateOfBirth: '25/08/1993', passportNumber: '', identityNumber: '001193001122', identityDate: '15/05/2019', identityPlace: 'Hà Nội', isCustomer: false, isVendor: false, createdDate: '10/01/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'DTTH', employeeName: 'Đào Thị Thu Hường', taxCode: '0106789012', positionName: 'Thủ quỹ', departmentCode: 'VP', departmentName: 'Văn phòng', bankAccount: '5566778899', bankName: 'VietinBank', status: 'Đang sử dụng', phoneNumber: '0933221100', genderName: 'Nữ', dateOfBirth: '08/03/1991', passportNumber: '', identityNumber: '001191003344', identityDate: '02/09/2017', identityPlace: 'Hà Nội', isCustomer: false, isVendor: false, createdDate: '05/05/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'DVH', employeeName: 'Đào Văn Hiệp', taxCode: '', positionName: 'Nhân viên', departmentCode: 'PKD', departmentName: 'Phòng kinh doanh', bankAccount: '9988776655', bankName: 'VPBank', status: 'Đang sử dụng', phoneNumber: '0911223344', genderName: 'Nam', dateOfBirth: '14/07/1996', passportNumber: '', identityNumber: '', identityDate: '', identityPlace: '', isCustomer: true, isVendor: false, createdDate: '12/04/2026', createdBy: 'Admin', modifiedDate: '14/04/2026', modifiedBy: 'Admin' },
-    { employeeCode: 'DVHOI', employeeName: 'Đỗ Văn Hội', taxCode: '0107890123', positionName: 'Công nhân', departmentCode: 'PKD', departmentName: 'Phòng kinh doanh', bankAccount: '', bankName: '', status: 'Ngừng sử dụng', phoneNumber: '0900112233', genderName: 'Nam', dateOfBirth: '30/10/1989', passportNumber: '', identityNumber: '001089005566', identityDate: '12/12/2016', identityPlace: 'Thái Bình', isCustomer: false, isVendor: false, createdDate: '20/03/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'DXH', employeeName: 'Đào Xuân Huân', taxCode: '0108901234', positionName: 'Nhân viên', departmentCode: 'VP', departmentName: 'Văn phòng', bankAccount: '2233445566', bankName: 'ACB', status: 'Đang sử dụng', phoneNumber: '0988123123', genderName: 'Nam', dateOfBirth: '17/06/1994', passportNumber: 'B9876543', identityNumber: '001094007788', identityDate: '25/08/2021', identityPlace: 'Hà Nội', isCustomer: false, isVendor: true, createdDate: '01/02/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'DXT', employeeName: 'Đồng Xuân Tùng', taxCode: '', positionName: 'Công nhân', departmentCode: 'PKD', departmentName: 'Phòng kinh doanh', bankAccount: '', bankName: '', status: 'Ngừng sử dụng', phoneNumber: '', genderName: 'Nam', dateOfBirth: '02/02/1998', passportNumber: '', identityNumber: '', identityDate: '', identityPlace: '', isCustomer: false, isVendor: false, createdDate: '18/05/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NML', employeeName: 'Nghiêm Mạnh Linh', taxCode: '0109012345', positionName: 'Công nhân', departmentCode: 'PKD', departmentName: 'Phòng kinh doanh', bankAccount: '3344556677', bankName: 'TPBank', status: 'Đang sử dụng', phoneNumber: '0977889900', genderName: 'Nam', dateOfBirth: '19/09/1997', passportNumber: '', identityNumber: '001097009900', identityDate: '10/10/2020', identityPlace: 'Hà Nội', isCustomer: true, isVendor: true, createdDate: '22/04/2026', createdBy: 'Admin', modifiedDate: '25/04/2026', modifiedBy: 'Admin' },
-    { employeeCode: 'NTN', employeeName: 'Nguyễn Thị Nên', taxCode: '0101122334', positionName: 'Kế toán', departmentCode: 'PKT', departmentName: 'Phòng Kế toán', bankAccount: '4455667788', bankName: 'Vietcombank', status: 'Đang sử dụng', phoneNumber: '0966778899', genderName: 'Nữ', dateOfBirth: '21/12/1990', passportNumber: '', identityNumber: '001190001234', identityDate: '05/05/2018', identityPlace: 'Hà Nội', isCustomer: false, isVendor: false, createdDate: '05/01/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NTX', employeeName: 'Nguyễn Thị Xoa', taxCode: '', positionName: 'Công nhân', departmentCode: 'PKD', departmentName: 'Phòng kinh doanh', bankAccount: '', bankName: '', status: 'Ngừng sử dụng', phoneNumber: '0911335577', genderName: 'Nữ', dateOfBirth: '11/11/1992', passportNumber: '', identityNumber: '001192005678', identityDate: '', identityPlace: '', isCustomer: false, isVendor: false, createdDate: '14/03/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00001', employeeName: 'lvtho', taxCode: '', positionName: 'Nhân viên', departmentCode: 'PKD', departmentName: 'Phòng kinh doanh', bankAccount: '', bankName: '', status: 'Đang sử dụng', phoneNumber: '', genderName: 'Nam', dateOfBirth: '', passportNumber: '', identityNumber: '', identityDate: '', identityPlace: '', isCustomer: false, isVendor: false, createdDate: '24/05/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00002', employeeName: 'lvtho 2', taxCode: '', positionName: 'Nhân viên', departmentCode: 'PKD', departmentName: 'Phòng kinh doanh', bankAccount: '', bankName: '', status: 'Đang sử dụng', phoneNumber: '', genderName: 'Nữ', dateOfBirth: '', passportNumber: '', identityNumber: '', identityDate: '', identityPlace: '', isCustomer: false, isVendor: false, createdDate: '24/05/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00003', employeeName: 'lvtho 3', taxCode: '0109988776', positionName: 'Lập trình viên', departmentCode: 'PIT', departmentName: 'Phòng IT', bankAccount: '5566778899', bankName: 'Techcombank', status: 'Đang sử dụng', phoneNumber: '0988776655', genderName: 'Nam', dateOfBirth: '01/01/1995', passportNumber: '', identityNumber: '001095001122', identityDate: '10/10/2020', identityPlace: 'Hà Nội', isCustomer: false, isVendor: false, createdDate: '25/05/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00004', employeeName: 'lvtho 4', taxCode: '', positionName: 'Kiểm thử viên', departmentCode: 'PIT', departmentName: 'Phòng IT', bankAccount: '', bankName: '', status: 'Đang sử dụng', phoneNumber: '0977665544', genderName: 'Nữ', dateOfBirth: '02/02/1996', passportNumber: '', identityNumber: '', identityDate: '', identityPlace: '', isCustomer: false, isVendor: false, createdDate: '25/05/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00005', employeeName: 'lvtho 5', taxCode: '0108877665', positionName: 'Trưởng phòng IT', departmentCode: 'PIT', departmentName: 'Phòng IT', bankAccount: '6677889900', bankName: 'Vietcombank', status: 'Đang sử dụng', phoneNumber: '0966554433', genderName: 'Nam', dateOfBirth: '03/03/1988', passportNumber: 'C1122334', identityNumber: '001088003344', identityDate: '15/05/2015', identityPlace: 'Hà Nội', isCustomer: true, isVendor: false, createdDate: '25/05/2026', createdBy: 'Admin', modifiedDate: '26/05/2026', modifiedBy: 'Admin' },
-    { employeeCode: 'NV00006', employeeName: 'Trần Thị Mai', taxCode: '', positionName: 'Nhân sự', departmentCode: 'PNS', departmentName: 'Phòng Nhân sự', bankAccount: '', bankName: '', status: 'Đang sử dụng', phoneNumber: '', genderName: 'Nữ', dateOfBirth: '04/04/1994', passportNumber: '', identityNumber: '001194005566', identityDate: '', identityPlace: '', isCustomer: false, isVendor: false, createdDate: '20/05/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00007', employeeName: 'Lê Văn Tám', taxCode: '0107766554', positionName: 'Bảo vệ', departmentCode: 'VP', departmentName: 'Văn phòng', bankAccount: '7788990011', bankName: 'Agribank', status: 'Đang sử dụng', phoneNumber: '0955443322', genderName: 'Nam', dateOfBirth: '05/05/1975', passportNumber: '', identityNumber: '001075007788', identityDate: '20/10/2010', identityPlace: 'Hà Nội', isCustomer: false, isVendor: false, createdDate: '15/05/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00008', employeeName: 'Phạm Thu Thủy', taxCode: '', positionName: 'Lễ tân', departmentCode: 'VP', departmentName: 'Văn phòng', bankAccount: '8899001122', bankName: 'Sacombank', status: 'Đang sử dụng', phoneNumber: '0944332211', genderName: 'Nữ', dateOfBirth: '06/06/1998', passportNumber: '', identityNumber: '', identityDate: '', identityPlace: '', isCustomer: true, isVendor: false, createdDate: '10/05/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00009', employeeName: 'Hoàng Minh Tuấn', taxCode: '0106655443', positionName: 'Kinh doanh', departmentCode: 'PKD', departmentName: 'Phòng kinh doanh', bankAccount: '9900112233', bankName: 'VIB', status: 'Ngừng sử dụng', phoneNumber: '0933221100', genderName: 'Nam', dateOfBirth: '07/07/1991', passportNumber: '', identityNumber: '001091009900', identityDate: '12/12/2018', identityPlace: 'Đà Nẵng', isCustomer: false, isVendor: true, createdDate: '05/05/2026', createdBy: 'Admin', modifiedDate: '10/05/2026', modifiedBy: 'Admin' },
-    { employeeCode: 'NV00010', employeeName: 'Vũ Hải Yến', taxCode: '', positionName: 'Kế toán trưởng', departmentCode: 'PKT', departmentName: 'Phòng Kế toán', bankAccount: '', bankName: '', status: 'Đang sử dụng', phoneNumber: '0922110099', genderName: 'Nữ', dateOfBirth: '08/08/1985', passportNumber: 'D4455667', identityNumber: '001185001122', identityDate: '08/08/2015', identityPlace: 'Hà Nội', isCustomer: false, isVendor: false, createdDate: '01/05/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00011', employeeName: 'Ngô Trọng Đạt', taxCode: '0105544332', positionName: 'Nhân viên IT', departmentCode: 'PIT', departmentName: 'Phòng IT', bankAccount: '1011121314', bankName: 'MB Bank', status: 'Đang sử dụng', phoneNumber: '0911009988', genderName: 'Nam', dateOfBirth: '09/09/1997', passportNumber: '', identityNumber: '', identityDate: '', identityPlace: '', isCustomer: false, isVendor: false, createdDate: '28/04/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00012', employeeName: 'Trịnh Thanh Bình', taxCode: '', positionName: 'Tạp vụ', departmentCode: 'VP', departmentName: 'Văn phòng', bankAccount: '', bankName: '', status: 'Ngừng sử dụng', phoneNumber: '', genderName: 'Nữ', dateOfBirth: '10/10/1970', passportNumber: '', identityNumber: '001170003344', identityDate: '10/10/2010', identityPlace: 'Nam Định', isCustomer: false, isVendor: false, createdDate: '25/04/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00013', employeeName: 'Bùi Anh Khoa', taxCode: '0104433221', positionName: 'Chuyên viên', departmentCode: 'PNS', departmentName: 'Phòng Nhân sự', bankAccount: '1213141516', bankName: 'Techcombank', status: 'Đang sử dụng', phoneNumber: '0900998877', genderName: 'Nam', dateOfBirth: '11/11/1993', passportNumber: '', identityNumber: '001093005566', identityDate: '11/11/2019', identityPlace: 'Hà Nội', isCustomer: true, isVendor: true, createdDate: '20/04/2026', createdBy: 'Admin', modifiedDate: '22/04/2026', modifiedBy: 'Admin' },
-    { employeeCode: 'NV00014', employeeName: 'Lý Thảo Nguyên', taxCode: '', positionName: 'Thực tập sinh', departmentCode: 'PIT', departmentName: 'Phòng IT', bankAccount: '', bankName: '', status: 'Đang sử dụng', phoneNumber: '0899887766', genderName: 'Nữ', dateOfBirth: '12/12/2001', passportNumber: '', identityNumber: '', identityDate: '', identityPlace: '', isCustomer: false, isVendor: false, createdDate: '15/04/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00015', employeeName: 'Đinh Tuấn Kiệt', taxCode: '0103322110', positionName: 'Trưởng phòng KD', departmentCode: 'PKD', departmentName: 'Phòng kinh doanh', bankAccount: '1415161718', bankName: 'Vietcombank', status: 'Đang sử dụng', phoneNumber: '0888776655', genderName: 'Nam', dateOfBirth: '13/01/1982', passportNumber: 'E7788990', identityNumber: '001082007788', identityDate: '13/01/2016', identityPlace: 'Hà Nội', isCustomer: false, isVendor: false, createdDate: '10/04/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00016', employeeName: 'Trương Mỹ Lan', taxCode: '', positionName: 'Nhân viên', departmentCode: 'PKT', departmentName: 'Phòng Kế toán', bankAccount: '1617181920', bankName: 'BIDV', status: 'Ngừng sử dụng', phoneNumber: '', genderName: 'Nữ', dateOfBirth: '14/02/1990', passportNumber: '', identityNumber: '001190009900', identityDate: '', identityPlace: '', isCustomer: false, isVendor: true, createdDate: '05/04/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00017', employeeName: 'Tô Vĩnh Diện', taxCode: '0102211009', positionName: 'Công nhân', departmentCode: 'PKD', departmentName: 'Phòng kinh doanh', bankAccount: '', bankName: '', status: 'Đang sử dụng', phoneNumber: '0866554433', genderName: 'Nam', dateOfBirth: '15/03/1995', passportNumber: '', identityNumber: '', identityDate: '', identityPlace: '', isCustomer: false, isVendor: false, createdDate: '01/04/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00018', employeeName: 'Lưu Quang Vũ', taxCode: '', positionName: 'Biên tập viên', departmentCode: 'VP', departmentName: 'Văn phòng', bankAccount: '1819202122', bankName: 'VPBank', status: 'Đang sử dụng', phoneNumber: '0855443322', genderName: 'Nam', dateOfBirth: '16/04/1980', passportNumber: '', identityNumber: '001080001122', identityDate: '16/04/2010', identityPlace: 'Hà Nội', isCustomer: true, isVendor: false, createdDate: '28/03/2026', createdBy: 'Admin', modifiedDate: '30/03/2026', modifiedBy: 'Admin' },
-    { employeeCode: 'NV00019', employeeName: 'Chu Văn An', taxCode: '0101100998', positionName: 'Cố vấn', departmentCode: 'VP', departmentName: 'Văn phòng', bankAccount: '', bankName: '', status: 'Ngừng sử dụng', phoneNumber: '', genderName: 'Nam', dateOfBirth: '17/05/1972', passportNumber: 'F1122334', identityNumber: '001072003344', identityDate: '', identityPlace: '', isCustomer: false, isVendor: false, createdDate: '20/03/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00020', employeeName: 'Hà Kiều Anh', taxCode: '', positionName: 'Nhân viên', departmentCode: 'PNS', departmentName: 'Phòng Nhân sự', bankAccount: '2021222324', bankName: 'ACB', status: 'Đang sử dụng', phoneNumber: '0833221100', genderName: 'Nữ', dateOfBirth: '18/06/1999', passportNumber: '', identityNumber: '', identityDate: '', identityPlace: '', isCustomer: false, isVendor: false, createdDate: '15/03/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00021', employeeName: 'Võ Nguyên Giáp', taxCode: '0100099887', positionName: 'Bảo vệ', departmentCode: 'VP', departmentName: 'Văn phòng', bankAccount: '', bankName: '', status: 'Đang sử dụng', phoneNumber: '0822110099', genderName: 'Nam', dateOfBirth: '19/07/1984', passportNumber: '', identityNumber: '001084005566', identityDate: '19/07/2015', identityPlace: 'Hà Nội', isCustomer: false, isVendor: false, createdDate: '10/03/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00022', employeeName: 'Mạc Đĩnh Chi', taxCode: '', positionName: 'Lái xe', departmentCode: 'PKD', departmentName: 'Phòng kinh doanh', bankAccount: '2425262728', bankName: 'TPBank', status: 'Ngừng sử dụng', phoneNumber: '', genderName: 'Nam', dateOfBirth: '20/08/1987', passportNumber: '', identityNumber: '', identityDate: '', identityPlace: '', isCustomer: false, isVendor: true, createdDate: '05/03/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' },
-    { employeeCode: 'NV00023', employeeName: 'Hồ Xuân Hương', taxCode: '0109887766', positionName: 'Nhân sự', departmentCode: 'PNS', departmentName: 'Phòng Nhân sự', bankAccount: '', bankName: '', status: 'Đang sử dụng', phoneNumber: '0800998877', genderName: 'Nữ', dateOfBirth: '21/09/1994', passportNumber: '', identityNumber: '001194007788', identityDate: '21/09/2020', identityPlace: 'Hà Nội', isCustomer: true, isVendor: true, createdDate: '01/03/2026', createdBy: 'Admin', modifiedDate: '05/03/2026', modifiedBy: 'Admin' },
-    { employeeCode: 'NV00024', employeeName: 'Nguyễn Du', taxCode: '', positionName: 'Kiểm toán nội bộ', departmentCode: 'PKT', departmentName: 'Phòng Kế toán', bankAccount: '2829303132', bankName: 'Vietcombank', status: 'Đang sử dụng', phoneNumber: '0799887766', genderName: 'Nam', dateOfBirth: '22/10/1989', passportNumber: 'G9988776', identityNumber: '', identityDate: '', identityPlace: '', isCustomer: false, isVendor: false, createdDate: '25/02/2026', createdBy: 'Admin', modifiedDate: '', modifiedBy: '' }
-]);
+// ẩn hiển thị cột
 
-const openAddForm = () => {
-    currentEmployeeData.value = null; // Form thêm mới nên dữ liệu truyền vào là null
-    showEmployeeForm.value = true;
-};
+const visibleColumns = computed(() => {
+    return tableColumns.value.filter(col => col.hidden !== true && col.visible !== false && col.isShow !== false);
+});
 
-// Hàm chạy khi bấm nút "Sửa" trên từng dòng của MsTable
-const openEditForm = (employeeData) => {
-    currentEmployeeData.value = employeeData; // Gửi dữ liệu của dòng đó vào form
-    showEmployeeForm.value = true;
-};
-
-// Hàm chạy khi bấm nút "Hủy" hoặc nút "X" trên Form
-const closeEmployeeForm = () => {
-    showEmployeeForm.value = false;
-};
-
-// Hàm chạy khi bấm "Cất" hoặc "Cất và Thêm" trên Form
-const handleSaveEmployee = async ({ data, isSaveAndAdd }) => {
-    console.log("[Giả lập API] Dữ liệu chuẩn bị lưu:", data);
-    console.log("Loại hành động:", isSaveAndAdd ? "Cất và Thêm mới" : "Cất và Đóng");
-
-    try {
-        // [NƠI GHÉP API SAU NÀY]
-        if (currentEmployeeData.value) {
-            // Có dữ liệu ban đầu -> Đây là hành động Sửa (Update)
-            // await axios.put(`.../Employees/${data.employeeId}`, data);
-            console.log("Đang gọi API Update...");
-        } else {
-            // Không có dữ liệu ban đầu -> Đây là hành động Thêm (Create)
-            // await axios.post(`.../Employees`, data);
-            console.log("Đang gọi API Insert...");
-        }
-
-        // Xử lý sau khi lưu thành công
-        // await fetchEmployees(); // Load lại bảng dữ liệu
-
-        if (isSaveAndAdd) {
-            // Nếu là "Cất và Thêm", giữ nguyên form, xóa trắng dữ liệu cũ đi để nhập tiếp
-            currentEmployeeData.value = null;
-            // (Bạn sẽ cần logic reset form bên trong EmployeeForm.vue nữa)
-        } else {
-            // Nếu là "Cất", đóng form lại
-            closeEmployeeForm();
-        }
-
-    } catch (error) {
-        console.error("Lỗi khi lưu dữ liệu:", error);
-    }
-};
-
-
-const activeFilters = ref({}); // Lưu trữ điều kiện lọc hiện tại của các cột
-
-// Hàm nhận tín hiệu Lọc hoặc Bỏ lọc từ component MsTable.vue
-const onApplyFilter = ({ field, value, operator }) => {
-    const newFilters = { ...activeFilters.value };
-
-    // Nếu giá trị nhập vào bị rỗng VÀ điều kiện KHÔNG PHẢI là (Trống)/(Không trống)
-    // => Tức là người dùng muốn Bỏ lọc cột này -> Xóa thông tin lọc của cột
-    if ((value === null || value === undefined || value.trim() === '') && !['empty', 'not_empty'].includes(operator)) {
-        delete newFilters[field];
+watch(employees, (newEmployees) => {
+    if (newEmployees && newEmployees.length > 0) {
+        mockData.value = [...newEmployees];
     } else {
-        // Lưu lại thông tin lọc mới (Trim bỏ dấu cách thừa ở đầu cuối)
-        newFilters[field] = {
-            value: value ? value.trim() : '',
-            operator: operator
-        };
+        mockData.value = [];
     }
+}, { immediate: true, deep: true });
 
-    activeFilters.value = newFilters;
+const loadData = async () => {
+    try {
+        const params = {
+            pageNumber: currentPage.value || 1,
+            pageSize: pageSize.value || 20,
+            keyword: searchQuery.value ? searchQuery.value.trim() : ''
+        };
+        await employeeStore.fetchEmployeesPaging(params);
+    } catch (error) {
+        console.error("Lỗi khi kết nối API, tự động đồng bộ sang MockData để duy trì hệ thống:", error);
+    }
 };
 
-// Mảng dữ liệu hiển thị tự động tính toán lại khi mockData hoặc activeFilters thay đổi
+onMounted(() => { loadData(); });
+
+watch(searchQuery, (newVal) => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        currentPage.value = 1; // Đưa về trang đầu tiên khi có từ khóa tìm kiếm mới
+        loadData();
+    }, 2000);
+});
+
+watch([currentPage, pageSize], () => { loadData(); });
+
 const displayData = computed(() => {
-    return mockData.value.filter(item => {
-        // Lặp qua tất cả các cột đang được đặt bộ lọc
+    let sourceData = (mockData.value && mockData.value.length > 0) ? mockData.value : (employees.value || []);
+
+    // BƯỚC 1: Tìm kiếm theo mã và tên nhân viên (từ ô input tổng)
+    const keyword = searchQuery.value ? searchQuery.value.trim().toLowerCase() : '';
+    if (keyword) {
+        sourceData = sourceData.filter(item => {
+            const code = (item.employeeCode || '').toLowerCase();
+            const name = (item.fullName || '').toLowerCase();
+            return code.includes(keyword) || name.includes(keyword);
+        });
+    }
+
+    // BƯỚC 2: Lọc theo từng cột (từ icon Phễu)
+    return sourceData.filter(item => {
         for (const key in activeFilters.value) {
             const filterInfo = activeFilters.value[key];
             if (!filterInfo) continue;
 
             const op = filterInfo.operator;
+            // Chuyển an toàn sang String để tránh lỗi khi lọc các cột kiểu số
+            const itemValueStr = (item[key] === null || item[key] === undefined) ? '' : String(item[key]).toLowerCase();
+            const searchValueStr = (filterInfo.value || '').toString().toLowerCase();
 
-            // Ép kiểu về dạng chuỗi viết thường để tìm kiếm không phân biệt hoa/thường
-            const itemValueStr = (item[key] === null || item[key] === undefined) ? '' : item[key].toString().toLowerCase();
-            const searchValueStr = (filterInfo.value || '').toLowerCase();
-
-            // Áp dụng 8 điều kiện lọc chuẩn
             switch (op) {
-                case 'empty': // (Trống)
-                    if (itemValueStr !== '') return false;
-                    break;
-                case 'not_empty': // (Không trống)
-                    if (itemValueStr === '') return false;
-                    break;
-                case 'equals': // Bằng
-                    if (itemValueStr !== searchValueStr) return false;
-                    break;
-                case 'not_equals': // Khác
-                    if (itemValueStr === searchValueStr) return false;
-                    break;
-                case 'contains': // Chứa
-                    if (!itemValueStr.includes(searchValueStr)) return false;
-                    break;
-                case 'not_contains': // Không chứa
-                    if (itemValueStr.includes(searchValueStr)) return false;
-                    break;
-                case 'starts_with': // Bắt đầu với
-                    if (!itemValueStr.startsWith(searchValueStr)) return false;
-                    break;
-                case 'ends_with': // Kết thúc với
-                    if (!itemValueStr.endsWith(searchValueStr)) return false;
-                    break;
-                default: // Mặc định là 'Chứa'
-                    if (!itemValueStr.includes(searchValueStr)) return false;
+                case 'empty': if (itemValueStr !== '') return false; break;
+                case 'not_empty': if (itemValueStr === '') return false; break;
+                case 'equals': if (itemValueStr !== searchValueStr) return false; break;
+                case 'not_equals': if (itemValueStr === searchValueStr) return false; break;
+                case 'contains': if (!itemValueStr.includes(searchValueStr)) return false; break;
+                case 'not_contains': if (itemValueStr.includes(searchValueStr)) return false; break;
+                case 'starts_with': if (!itemValueStr.startsWith(searchValueStr)) return false; break;
+                case 'ends_with': if (!itemValueStr.endsWith(searchValueStr)) return false; break;
+                default: if (!itemValueStr.includes(searchValueStr)) return false;
             }
         }
-
-        // Dòng dữ liệu này thỏa mãn tất cả các bộ lọc thì được hiển thị
-        return true;
+        return true; // Dòng này qua được tất cả các cửa ải lọc
     });
 });
 
-const openDeleteDialog = (employeeData) => {
-    employeeToDelete.value = employeeData; // Cất dữ liệu nhân viên được click
-    showDeleteDialog.value = true;         // Mở popup
+const openAddForm = async () => {
+    currentEmployeeData.value = null;
+    showEmployeeForm.value = true;
+    try { await employeeStore.fetchNewCode(); }
+    catch (error) { console.error("Không thể lấy mã tự động:", error); }
 };
 
-// Hàm chạy khi người dùng bấm nút "Có" trên Dialog
-const handleConfirmDelete = async () => {
-    if (!employeeToDelete.value) return;
-
-    // Lấy ra mã hoặc ID (Sau này nối API thì dùng EmployeeId kiểu Guid)
-    const recordId = employeeToDelete.value.employeeCode;
-
+const openEditForm = async (employeeData) => {
     try {
-        // [NƠI GHÉP API SAU NÀY] 
-        // Ví dụ: await axios.delete(`https://api.yourdomain.com/v1/Employees/${recordId}`);
-        console.log(`[Giả lập API] Đang gửi Request XÓA nhân viên: ${recordId}`);
-
-        // --- Xử lý sau khi gọi API thành công ---
-        // 1. Ẩn dialog
-        showDeleteDialog.value = false;
-
-        // 2. Load lại dữ liệu bảng (Thêm hàm get/fetch danh sách vào đây)
-        // Ví dụ: await fetchEmployees(); 
-
-        // (Tạm thời xóa chay trên giao diện để test)
-        mockData.value = mockData.value.filter(emp => emp.employeeCode !== recordId);
-
-        // 3. (Tùy chọn) Hiện Toast message báo xóa thành công
-
+        const id = employeeData.employeeId;
+        const fullData = await employeeStore.fetchEmployeeById(id);
+        currentEmployeeData.value = { ...fullData };
+        showEmployeeForm.value = true;
     } catch (error) {
-        console.error("Lỗi khi xóa nhân viên:", error);
-        // Xử lý lỗi: Hiện dialog cảnh báo không xóa được...
+        console.error("Lỗi khi tải chi tiết nhân viên:", error);
+        alert("Không thể tải thông tin chi tiết nhân viên lúc này.");
     }
+};
+
+const closeEmployeeForm = () => { showEmployeeForm.value = false; };
+
+const handleSaveEmployee = async ({ data, isSaveAndAdd }) => {
+    try {
+        // Kiểm tra chặt chẽ: Chỉ khi biến tạm CÓ employeeId thì mới là hành động Sửa
+        // (Vì khi Nhân bản, ta đã gán ép employeeId = null rồi)
+        const isEdit = currentEmployeeData.value && currentEmployeeData.value.employeeId;
+
+        if (isEdit) {
+            // ==========================================
+            // 1. TRƯỜNG HỢP SỬA NHÂN VIÊN
+            // ==========================================
+            await employeeStore.updateEmployeeInfo(data.employeeId, data);
+            await loadData(); // Tải lại bảng bình thường
+
+        } else {
+            // ==========================================
+            // 2. TRƯỜNG HỢP THÊM MỚI HOẶC NHÂN BẢN
+            // ==========================================
+            await employeeStore.createNewEmployee(data);
+            await loadData(); // Gọi API lấy trang 1 từ DB
+
+            // 🔴 TRICK UI: ÉP NHÂN VIÊN MỚI LÊN ĐẦU DANH SÁCH TẠM THỜI 🔴
+            // Tìm xem nhân viên vừa tạo có xuất hiện trên trang 1 không
+            const existingIndex = mockData.value.findIndex(emp => emp.employeeCode === data.employeeCode);
+
+            if (existingIndex === -1) {
+                // Backend đẩy sang trang khác -> Ép đẩy dữ liệu vừa nhập lên dòng 1
+                mockData.value.unshift(data);
+
+                // Cắt bỏ dòng cuối cùng để giữ đúng số lượng pageSize (VD: Không để bảng thành 21/20 dòng)
+                if (mockData.value.length > pageSize.value) {
+                    mockData.value.pop();
+                }
+            } else if (existingIndex > 0) {
+                // Nằm ở trang 1 nhưng bị đẩy xuống dưới -> Cắt nó đưa lên dòng 1
+                const newEmp = mockData.value.splice(existingIndex, 1)[0];
+                mockData.value.unshift(newEmp);
+            }
+        }
+
+        // ==========================================
+        // XỬ LÝ SAU KHI CẤT THÀNH CÔNG
+        // ==========================================
+        if (isSaveAndAdd) {
+            currentEmployeeData.value = null; // Xóa trắng form
+            await employeeStore.fetchNewCode(); // Tự động lấy mã mới điền vào
+        } else {
+            closeEmployeeForm(); // Cất xong thì đóng form
+        }
+    } catch (error) {
+        console.error("Lỗi cất giữ dữ liệu:", error);
+    }
+};
+
+// ==========================================================
+//  QUẢN LÝ XÓA VÀ THỰC HIỆN HÀNG LOẠT
+// ==========================================================
+
+const selectedEmployeeIds = ref([]); // Chứa danh sách ID đang tích trên bảng
+const showBatchMenu = ref(false); // Quản lý đóng/mở Dropdown hàng loạt
+const confirmActionType = ref('');
+
+// Reset Checkbox khi chuyển trang / tìm kiếm
+watch([currentPage, pageSize, searchQuery], () => {
+    selectedEmployeeIds.value = [];
+});
+
+// Click ra ngoài thì đóng menu hàng loạt
+const closeBatchMenu = (e) => {
+    if (!e.target.closest('.batch-action-container')) {
+        showBatchMenu.value = false;
+    }
+};
+onMounted(() => window.addEventListener('click', closeBatchMenu));
+onUnmounted(() => window.removeEventListener('click', closeBatchMenu));
+
+// 1. Kích hoạt Xóa 1 bản ghi
+const openDeleteDialog = (employeeData) => {
+    employeeToDelete.value = employeeData;
+    confirmActionType.value = 'single_delete'; // Xác định là xóa 1
+    showDeleteDialog.value = true;
+};
+
+// 2. Kích hoạt Hành động hàng loạt (Từ Menu Dropdown)
+const confirmBatchAction = (actionType) => {
+    confirmActionType.value = actionType; // Gắn loại hành động (batch_delete, stop_using, start_using)
+    showBatchMenu.value = false; // Đóng menu dropdown
+    showDeleteDialog.value = true; // Bật hộp thoại xác nhận lên
+};
+
+// 3. Hàm thi hành Đích cuối cùng (Sau khi bấm nút "Có" trên Dialog)
+const executeConfirmedAction = async () => {
+    try {
+        if (confirmActionType.value === 'single_delete') {
+            const targetId = employeeToDelete.value.employeeId || employeeToDelete.value.employeeCode;
+            await employeeStore.removeEmployee(targetId);
+
+            // 👇 BỔ SUNG ĐOẠN NÀY ĐỂ GỌI API ĐỔI TRẠNG THÁI ĐƠN LẺ 👇
+        } else if (confirmActionType.value === 'single_stop_using' || confirmActionType.value === 'single_start_using') {
+            // Tận dụng API hàng loạt nhưng nhét duy nhất 1 cái ID vào mảng
+            await employeeStore.changeEmployeeStatus({
+                ids: [employeeToDelete.value.employeeId],
+                status: employeeToDelete.value.targetStatus
+            });
+            // 👆 KẾT THÚC BỔ SUNG 👆
+
+        } else if (confirmActionType.value === 'batch_delete') {
+            await employeeStore.removeMultipleEmployees(selectedEmployeeIds.value);
+            selectedEmployeeIds.value = [];
+
+        } else if (confirmActionType.value === 'stop_using') {
+            await employeeStore.changeEmployeeStatus({
+                ids: selectedEmployeeIds.value,
+                status: 0
+            });
+            selectedEmployeeIds.value = [];
+
+        } else if (confirmActionType.value === 'start_using') {
+            await employeeStore.changeEmployeeStatus({
+                ids: selectedEmployeeIds.value,
+                status: 1
+            });
+            selectedEmployeeIds.value = [];
+        }
+
+        // Đóng dialog và lấy dữ liệu mới nhất
+        showDeleteDialog.value = false;
+        employeeToDelete.value = null; // Clean up biến mượn tạm
+        await loadData();
+    } catch (error) {
+        console.error("Lỗi khi thực thi hành động:", error);
+    }
+};
+
+// ==========================================================
+
+const handleExportExcel = async () => {
+    try {
+        const params = { keyword: searchQuery.value.trim() };
+        await employeeStore.exportEmployeesToExcel(params);
+    } catch (error) { console.error("Lỗi xuất Excel:", error); }
+};
+
+const handlePageChange = (page) => { currentPage.value = page; };
+const handlePageSizeChange = (size) => { pageSize.value = size; currentPage.value = 1; };
+const handleApplyColumnSettings = (newColumns) => { tableColumns.value = [...newColumns]; };
+
+// chuyển value thành String an toàn trước khi trim()
+const onApplyFilter = ({ field, value, operator }) => {
+    const newFilters = { ...activeFilters.value };
+    const valStr = (value !== null && value !== undefined) ? String(value).trim() : '';
+
+    if (valStr === '' && !['empty', 'not_empty'].includes(operator)) {
+        delete newFilters[field];
+    } else {
+        newFilters[field] = { value: valStr, operator: operator };
+    }
+    activeFilters.value = newFilters;
+};
+
+// HÀM XỬ LÝ NHÂN BẢN: Lấy full data, reset ID và cấp mã mới
+const openCloneForm = async (employeeData) => {
+    try {
+        const fullData = await employeeStore.fetchEmployeeById(employeeData.employeeId);
+        const newCode = await employeeStore.fetchNewCode();
+
+        // Ép dữ liệu thành bản ghi mới tinh
+        const cloneData = { ...fullData };
+        cloneData.employeeId = null;
+        cloneData.employeeCode = newCode;
+
+        // Reset ID của mảng ngân hàng
+        if (cloneData.bankAccounts && cloneData.bankAccounts.length > 0) {
+            cloneData.bankAccounts = cloneData.bankAccounts.map(b => ({
+                ...b,
+                bankAccountId: null,
+                employeeId: null
+            }));
+        }
+
+        currentEmployeeData.value = cloneData;
+        showEmployeeForm.value = true;
+    } catch (error) {
+        console.error("Lỗi khi nhân bản:", error);
+        alert("Không thể tải dữ liệu để nhân bản.");
+    }
+};
+
+// HÀM  ĐỔI TRẠNG THÁI 
+const openUpdateStatusDialog = ({ row, status }) => {
+    // Mượn tạm employeeToDelete để lưu dòng đang chọn và trạng thái muốn đổi thành
+    employeeToDelete.value = { ...row, targetStatus: status };
+    confirmActionType.value = status === 0 ? 'single_stop_using' : 'single_start_using';
+    showDeleteDialog.value = true;
 };
 </script>
 
 <style scoped>
-/* Tổng thể trang */
+/* --- 1. TỔNG THỂ TRANG --- */
 .m-employee-view {
-    height: 100%;
-    background-color: #f4f5f8;
     height: 100vh;
-    padding: 0 0px 20px 20px;
+    background-color: #f4f5f8;
+    padding: 0 0 20px 20px;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -324,7 +505,7 @@ const handleConfirmDelete = async () => {
     font-family: Arial, Helvetica, sans-serif;
 }
 
-/* --- 1. HEADER TRANG --- */
+/* --- 2. HEADER TRANG --- */
 .m-page-header {
     display: flex;
     justify-content: space-between;
@@ -363,7 +544,6 @@ const handleConfirmDelete = async () => {
     text-decoration: underline;
 }
 
-/* Split Button Thêm */
 .m-btn-split {
     display: flex;
     height: 36px;
@@ -398,7 +578,7 @@ const handleConfirmDelete = async () => {
     border-radius: 0 30px 30px 0;
 }
 
-/* --- 2. KHỐI NỘI DUNG NỀN TRẮNG --- */
+/* --- 3. KHỐI NỘI DUNG --- */
 .m-page-content {
     background-color: #ffffff;
     flex: 1;
@@ -412,7 +592,7 @@ const handleConfirmDelete = async () => {
     overflow: hidden;
 }
 
-/* --- 3. TOOLBAR --- */
+/* --- 4. TOOLBAR --- */
 .m-toolbar {
     display: flex;
     justify-content: space-between;
@@ -423,64 +603,7 @@ const handleConfirmDelete = async () => {
 .m-toolbar-left {
     display: flex;
     align-items: center;
-
-}
-
-.btn-dropdown.m-btn-util {
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-
-    gap: 6px !important;
-
-    height: 36px !important;
-    padding: 0 16px !important;
-
-    border-radius: 20px !important;
-    border: 1px solid #8d9096 !important;
-    background-color: #fff !important;
-
-    width: fit-content !important;
-    line-height: 1 !important;
-}
-.btn-dropdown.m-btn-util .mi_icon_chevron_down {
-    width: 16px !important;
-    height: 16px !important;
-
-    margin: 0 !important;
-    flex-shrink: 0 !important;
-
-    transform: translateY(5px); /* đẩy xuống */
-    opacity: 0.6;
-}
-
-.btn-dropdown.m-btn-util span {
-    color: #9b9b9b !important;   /* màu xám nhạt */
-    font-size: 14px !important;  /* to hơn */
-    font-weight: 600 !important; /* đậm vừa */
-    
-    display: flex !important;
-    align-items: center !important;
-    line-height: 1 !important;
-}
-
-
-.btn-dropdown.m-btn-util:hover {
-    border-color: #111 !important;
-    color: #111 !important;
-}
-
-.m-btn-util {
-    border: 2px solid #e0e0e0 !important;
-    border-radius: 30px !important;
-    padding: 0 16px !important;
-    color: #111 !important;
-    font-weight: 600 !important;
-    background-color: transparent !important;
-    height: 32px !important;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    margin-left: 20px;
 }
 
 .m-toolbar-right {
@@ -502,7 +625,90 @@ const handleConfirmDelete = async () => {
     justify-content: center;
 }
 
-/* --- 4. TABLE CONTAINER --- */
+/* Button Utilities & Batch Action */
+.btn-dropdown.m-btn-util {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    height: 36px !important;
+    padding: 0 16px !important;
+    border-radius: 20px !important;
+    border: 1px solid #8d9096 !important;
+    background-color: #fff !important;
+    width: fit-content !important;
+    line-height: 1 !important;
+    opacity: 0.5;
+    pointer-events: none;
+    transition: all 0.2s ease-in-out;
+    cursor: pointer;
+    /* Thêm con trỏ bàn tay */
+}
+
+.btn-dropdown.m-btn-util .mi_icon_chevron_down {
+    width: 16px !important;
+    height: 16px !important;
+    margin: 0 !important;
+    flex-shrink: 0 !important;
+    transform: translateY(5px);
+    opacity: 0.6;
+}
+
+.btn-dropdown.m-btn-util span {
+    color: #9b9b9b !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    display: flex !important;
+    align-items: center !important;
+    line-height: 1 !important;
+}
+
+.btn-dropdown.m-btn-util:hover {
+    border-color: #111 !important;
+    color: #111 !important;
+}
+
+/* Trạng thái active (hàng loạt) */
+.btn-dropdown.m-btn-util.active-batch {
+    opacity: 1;
+    pointer-events: auto;
+    border: 2px solid #111 !important;
+}
+
+.btn-dropdown.m-btn-util.active-batch span {
+    color: #111 !important;
+}
+
+.btn-dropdown.m-btn-util.active-batch .mi_icon_chevron_down {
+    opacity: 1 !important;
+}
+
+/* M-btn-util định nghĩa riêng */
+.m-btn-util {
+    border: 2px solid #e0e0e0 !important;
+    border-radius: 30px !important;
+    padding: 0 16px !important;
+    color: #111 !important;
+    font-weight: 600 !important;
+    background-color: transparent !important;
+    height: 32px !important;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dropdown-item {
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.dropdown-item:hover {
+    background-color: #f4f5f8;
+    color: #2ca01c;
+}
+
+/* --- 5. TABLE & PAGINATION --- */
 .m-table-container {
     height: calc(100vh - 180px);
     position: relative;
@@ -514,7 +720,6 @@ const handleConfirmDelete = async () => {
     border-bottom: none;
 }
 
-/* --- 5. PAGINATION FIXED --- */
 .m-pagination-fixed {
     position: absolute;
     bottom: 10px;
@@ -526,11 +731,9 @@ const handleConfirmDelete = async () => {
     padding: 0 12px;
 }
 
-/* --- ICON MASK --- */
+/* --- 6. ICONS --- */
 .m-icon {
-    background-repeat: no-repeat;
-    background-position: center;
-    background: url(../../assets/icons/Sprites-7ba27b53.svg) no-repeat;
+    background: url(../../assets/icons/Sprites-7ba27b53.svg) no-repeat center;
     width: 24px;
     height: 24px;
     min-width: 24px;
@@ -545,10 +748,12 @@ const handleConfirmDelete = async () => {
 }
 
 .mi_icon_chevron_down_white {
-    background-color: #fff;
-    -webkit-mask-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>');
-    width: 16px;
-    height: 16px;
+    background-position: -848px -359px;
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px;
+    min-height: 16px;
+    margin-right: 6px;
 }
 
 .mi_icon_refresh {
