@@ -56,7 +56,7 @@
                             iconRight="m-icon mi_icon_search" />
                     </div>
 
-                    <div class="m-toolbar-icon" title="Lấy lại dữ liệu" @click="loadData">
+                    <div class="m-toolbar-icon" title="Lấy lại dữ liệu" @click="loadDataAndReset">
                         <div class="m-icon mi_icon_refresh"></div>
                     </div>
                     <div class="m-toolbar-icon" title="Xuất ra Excel" @click="handleExportExcel">
@@ -223,6 +223,8 @@ const loadData = async () => {
     }
 };
 
+
+
 onMounted(() => { loadData(); });
 
 watch(searchQuery, (newVal) => {
@@ -274,6 +276,16 @@ const displayData = computed(() => {
         return true; // Dòng này qua được tất cả các cửa ải lọc
     });
 });
+
+const loadDataAndReset = () => {
+    // 1. Reset các trạng thái tìm kiếm và lọc
+    searchQuery.value = '';        // Xóa từ khóa tìm kiếm
+    activeFilters.value = {};      // Xóa tất cả bộ lọc ở các cột
+    currentPage.value = 1;         // Quay về trang 1
+
+    // 2. Gọi lại API để load dữ liệu mới nhất
+    loadData();
+};
 
 const openAddForm = async () => {
     currentEmployeeData.value = null;
@@ -756,6 +768,10 @@ const openUpdateStatusDialog = ({ row, status }) => {
 
 .mi_icon_refresh {
     background-position: -424px -200px;
+}
+
+.mi_icon_refresh:hover {
+    color: #000000;
 }
 
 .mi_icon_excel {

@@ -42,9 +42,9 @@
                         <div class="form-row">
                             <div class="form-group w-40 pr-1">
                                 <label>Mã <span class="required">*</span></label>
-                                <input type="text" v-model="employee.employeeCode" class="m-input m-input-readonly"
+                                <input type="text" v-model="employee.employeeCode" class="m-input"
                                     :class="{ 'm-input-error': errors.employeeCode }" :title="errors.employeeCode"
-                                    readonly ref="inputCode" />
+                                    ref="inputCode" />
                             </div>
                             <div class="form-group w-60">
                                 <label>Tên <span class="required">*</span></label>
@@ -351,6 +351,14 @@ const isCustomer = ref(false);
 const isVendor = ref(false);
 const activeTab = ref(1);
 
+const focusCodeInput = async () => {
+    await nextTick(); 
+    if (inputCode.value) {
+        inputCode.value.focus();
+        inputCode.value.select();
+    }
+};
+
 
 // ==========================================
 // 1. KHỞI TẠO DỮ LIỆU & RESET FORM
@@ -396,12 +404,14 @@ const resetForm = async () => {
     activeTab.value = 1;
     bankAccounts.value = [{ accountNumber: '', bankName: '', branch: '', province: '', focused: false }];
 
-    // Xóa tất cả các thông báo lỗi đỏ
     Object.keys(errors.value).forEach(key => errors.value[key] = '');
 
     try {
         const newCode = await employeeStore.fetchNewCode();
         employee.value.employeeCode = newCode;
+        
+        // GỌI FOCUS Ở ĐÂY SAU KHI CÓ MÃ MỚI
+        focusCodeInput(); 
     } catch (error) {
         console.error("Lỗi khi lấy mã nhân viên mới:", error);
     }
@@ -772,53 +782,44 @@ const saveForm = async (isSaveAndAdd) => {
 watch(
     () => props.editData,
     async (newData) => {
-        // 🔴 ĐÂY LÀ ĐOẠN LOG BẠN YÊU CẦU 🔴
-        console.log("==================================================");
-        console.log("🛠️ [DEBUG] DỮ LIỆU TỪ LƯỚI TRUYỀN VÀO FORM KHI SỬA:");
-        console.log(newData ? JSON.parse(JSON.stringify(newData)) : "TRẠNG THÁI THÊM MỚI (NULL)");
-        console.log("==================================================");
+        console.log("🛠️ [DEBUG] Dữ liệu truyền vào Form:", newData || "Thêm mới");
 
         if (newData) {
-            // 1. ĐỔ DỮ LIỆU CƠ BẢN
+            // 1. Ánh xạ dữ liệu cơ bản
             employee.value = { ...defaultEmployee, ...newData };
-            
-            // 2. XỬ LÝ ĐẶC THÙ: GIỚI TÍNH
-            if (newData.gender !== null && newData.gender !== undefined) {
-                employee.value.gender = String(newData.gender);
-            }
 
-            // 3. XỬ LÝ ĐẶC THÙ: CHECKBOX KHÁCH HÀNG / NHÀ CUNG CẤP
-            isCustomer.value = newData.isCustomer === true;
-            isVendor.value = newData.isSupplier === true; 
+            // 2. Xử lý các thuộc tính đặc thù (Kiểu dữ liệu)
+            employee.value.gender = newData.gender != null ? String(newData.gender) : '1';
+            isCustomer.value = !!newData.isCustomer;
+            isVendor.value = !!newData.isSupplier;
 
-            // 4. XỬ LÝ ĐẶC THÙ: NGÀY THÁNG
-            employee.value.dateOfBirth = newData.dateOfBirth ? newData.dateOfBirth.split('T')[0] : '';
-            employee.value.issueDate = newData.issueDate ? newData.issueDate.split('T')[0] : '';
+            // 3. Xử lý định dạng ngày tháng
+            employee.value.dateOfBirth = newData.dateOfBirth?.split('T')[0] || '';
+            employee.value.issueDate = newData.issueDate?.split('T')[0] || '';
 
-            // 5. MAP TÊN ĐƠN VỊ CHO COMBOBOX HIỂN THỊ
-            if (departments.value.length > 0 && newData.departmentId) {
-                const dept = departments.value.find(d => d.id === newData.departmentId);
-                departmentText.value = dept ? dept.name : (newData.departmentName || '');
-            } else {
-                departmentText.value = newData.departmentName || '';
-            }
+            // 4. Map tên đơn vị (Dùng optional chaining an toàn hơn)
+            const matchedDept = departments.value.find(d => d.id === newData.departmentId);
+            departmentText.value = matchedDept ? matchedDept.name : (newData.departmentName || '');
 
-            // 6. XỬ LÝ QUAN TRỌNG NHẤT: BẢNG NGÂN HÀNG
-            if (newData.bankAccounts && newData.bankAccounts.length > 0) {
-                bankAccounts.value = newData.bankAccounts.map(b => ({
-                    bankAccountId: b.bankAccountId,               
-                    accountNumber: b.bankAccountNumber || '',     
-                    bankName: b.bankName || '',                   
-                    branch: b.bankBranch || '',                   
-                    province: b.bankProvince || '',               
+            // 5. Cấu trúc lại bảng ngân hàng
+            bankAccounts.value = (newData.bankAccounts?.length > 0) 
+                ? newData.bankAccounts.map(b => ({
+                    bankAccountId: b.bankAccountId,
+                    accountNumber: b.bankAccountNumber || '',
+                    bankName: b.bankName || '',
+                    branch: b.bankBranch || '',
+                    province: b.bankProvince || '',
                     focused: false
-                }));
-            } else {
-                bankAccounts.value = [{ bankAccountId: null, accountNumber: '', bankName: '', branch: '', province: '', focused: false }];
-            }
+                }))
+                : [{ bankAccountId: null, accountNumber: '', bankName: '', branch: '', province: '', focused: false }];
         } else {
+            // Trường hợp Thêm mới
             await resetForm();
         }
+
+        // 6. GỌI FOCUS VÀ BÔI ĐEN SAU KHI ĐỔ DỮ LIỆU
+        // Hàm này đảm bảo DOM đã sẵn sàng
+        focusCodeInput();
     },
     { immediate: true }
 );
@@ -921,14 +922,6 @@ watch(
     background-color: #fff;
     border: 1px solid #babec5;
     border-radius: 2px;
-}
-
-.m-input-readonly {
-    background-color: #f2f2f2 !important;
-    /* Màu nền xám mờ */
-    cursor: not-allowed;
-    /* Đổi con trỏ chuột báo hiệu không được click */
-    color: #666;
 }
 
 .m-input-readonly:focus {

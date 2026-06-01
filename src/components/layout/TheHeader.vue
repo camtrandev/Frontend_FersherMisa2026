@@ -27,7 +27,6 @@
                 <div class="icon-header mi_icon_download" title="Tải xuống"></div>
                 <div class="icon-header mi_icon_setting" title="Cài đặt"></div>
                 <div class="icon-header mi_icon_chat" title="Trò chuyện"></div>
-                <div class="icon-header mi_icon_bell" title="Thông báo"></div>
                 <div class="icon-header mi_icon_help" title="Trợ giúp"></div>
                 <div class="icon-header mi_icon_book" title="Sổ sách"></div>
 
