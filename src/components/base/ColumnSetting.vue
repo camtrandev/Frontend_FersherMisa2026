@@ -347,6 +347,8 @@ const onDragEnd = (event) => {
     width: 16px;
     height: 16px;
     opacity: 0.6;
+    background: url(../../assets/icons/Sprites-7ba27b53.svg) no-repeat;
+    background-position: -992px -360px;
 }
 
 .text-link {
@@ -620,17 +622,20 @@ const onDragEnd = (event) => {
 .m-icon {
     width: 24px;
     height: 24px;
-    background-color: #555;
     mask-size: cover;
-    -webkit-mask-size: cover;
+    background: url(../../assets/icons/Sprites-7ba27b53.svg) no-repeat;
 }
 
 .mi_icon_chevron_left {
-    -webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>');
+    background-position: -35px -360px;
+    margin-top: 5px;
 }
 
 .mi_icon_chevron_right {
-    -webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>');
+    display: inline-block;
+    background-position: -35px -360px;
+    transform: rotate(180deg);
+    margin-bottom: 5px;
 }
 
 .mi_icon_close {

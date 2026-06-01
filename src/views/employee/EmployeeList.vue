@@ -316,8 +316,6 @@ const handleSaveEmployee = async ({ data, isSaveAndAdd }) => {
             await employeeStore.createNewEmployee(data);
             await loadData(); // Gọi API lấy trang 1 từ DB
 
-            // 🔴 TRICK UI: ÉP NHÂN VIÊN MỚI LÊN ĐẦU DANH SÁCH TẠM THỜI 🔴
-            // Tìm xem nhân viên vừa tạo có xuất hiện trên trang 1 không
             const existingIndex = mockData.value.findIndex(emp => emp.employeeCode === data.employeeCode);
 
             if (existingIndex === -1) {

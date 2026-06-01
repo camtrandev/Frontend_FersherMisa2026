@@ -138,7 +138,10 @@ const toggleDropdown = (index, event) => {
 
 
 const closeDropdown = () => { activeDropdown.value = null; };
+
+// Hàm sửa
 const handleEdit = (row) => { closeDropdown(); emit('onEditRow', row); };
+
 const handleAction = (actionName, row) => {
     closeDropdown();
     if (actionName === 'Xóa') emit('onDeleteRow', row);

@@ -357,7 +357,7 @@ const activeTab = ref(1);
 // ==========================================
 // Tạo khung chuẩn khớp 100% với API Backend
 const defaultEmployee = {
-    employeeId: null, // QUAN TRỌNG: Dùng để phân biệt POST hay PUT
+    employeeId: null, // Dùng để phân biệt POST hay PUT
     employeeCode: '',
     fullName: '',
     departmentId: '',
