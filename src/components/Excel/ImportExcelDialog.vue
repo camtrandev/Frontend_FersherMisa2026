@@ -57,8 +57,10 @@
                     <button v-if="currentStep === 2" class="m-btn m-btn-secondary btn-dark-mode"
                         @click="currentStep = 1" style="margin-right: 8px;">Quay lại</button>
 
-                    <button v-if="currentStep === 1" class="m-btn m-btn-primary" @click="goToStep2"
-                        :disabled="sharedData.length === 0">Tiếp tục</button>
+                    <button v-if="currentStep === 1" class="m-btn m-btn-primary" :class="{ 'btn-ready': hasFile }"
+                        :disabled="!hasFile" @click="nextStep">
+                        Tiếp tục
+                    </button>
                     <button v-if="currentStep === 2" class="m-btn m-btn-primary" @click="executeSave"
                         :disabled="validRecordsCount === 0">Thực hiện</button>
                     <button v-if="currentStep === 3" class="m-btn m-btn-primary" @click="closeDialog">Đóng</button>
@@ -86,11 +88,21 @@ const sharedData = ref([]); // Data đọc từ Excel
 const successData = ref([]); // Data lưu thành công
 const validRecordsCount = ref(0);
 
+// check có file chưa 
+const hasFile = ref(false);
+
 const step2Ref = ref(null); // Để gọi hàm Validate của Bước 2
 
 // Sự kiện từ Bước 1
-const onFileLoaded = (data) => { sharedData.value = data; };
-const onFileCleared = () => { sharedData.value = []; };
+const onFileLoaded = (data) => {
+    hasFile.value = true;
+    sharedData.value = data;
+
+};
+const onFileCleared = () => {
+    hasFile.value = false;
+    sharedData.value = [];
+};
 
 const closeDialog = () => {
     currentStep.value = 1;
@@ -107,6 +119,18 @@ const goToStep2 = async () => {
     setTimeout(() => {
         if (step2Ref.value) step2Ref.value.validateAll();
     }, 100);
+};
+
+// Trong file ImportExcelDialog.vue
+const nextStep = () => {
+    if (currentStep.value === 1) {
+        // Log ra toàn bộ dữ liệu Excel đọc được trước khi sang bước kiểm tra
+        console.log("📁 [EXCEL DATA] Dữ liệu chuẩn bị mang đi kiểm tra:", sharedData.value);
+    }
+    
+    if (currentStep.value < 3) {
+        currentStep.value++;
+    }
 };
 
 // Thực thi lưu Data ở Bước 3
@@ -273,5 +297,29 @@ const executeSave = async () => {
 
 .btn-dark-mode:hover {
     background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Trạng thái mặc định khi CHƯA có file (Nút bị mờ đi và khóa lại) */
+.m-btn-primary:disabled {
+    background-color: #e0e0e0 !important;
+    color: #9e9e9e !important;
+    border-color: #e0e0e0 !important;
+    cursor: not-allowed;
+}
+
+/* Trạng thái ĐÃ CÓ file (Xanh non lá cây rực rỡ) */
+.m-btn-primary.btn-ready {
+    background-color: #32CD32 !important;
+    /* Xanh lá mạ/Xanh non */
+    color: #ffffff !important;
+    border-color: #32CD32 !important;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    /* Hiệu ứng chuyển màu mượt mà */
+}
+
+.m-btn-primary.btn-ready:hover {
+    background-color: #2eb82e !important;
+    /* Đậm hơn một xíu khi hover */
 }
 </style>

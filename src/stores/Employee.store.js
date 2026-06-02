@@ -56,7 +56,7 @@ export const useEmployeeStore = defineStore('employee', {
             try {
                 const response = await employeeApi.getDepartments();
                 // Gán dữ liệu trả về vào state
-                this.departments = response.data; 
+                this.departments = response.data;
                 return response.data;
             } catch (error) {
                 console.error('Lỗi khi lấy danh sách phòng ban:', error);
@@ -82,15 +82,23 @@ export const useEmployeeStore = defineStore('employee', {
         },
 
         async checkDuplicateCodesList(codes) {
+            // Tối ưu hiệu năng: Nếu không có mã nào thì không cần gọi API
+            if (!codes || !Array.isArray(codes) || codes.length === 0) return [];
+
             try {
-                // Gọi sang file employeeApi.js
+                // Gọi API
                 const response = await employeeApi.checkDuplicateCodesList(codes);
-                
-                // Trả về dữ liệu (mảng các Object chứa employeeCode và isValid)
-                return response.data; 
+
+                // Lấy dữ liệu an toàn. Nếu Backend trả về trực tiếp [{...}], thì lấy response.data
+                const resultData = response.data || [];
+
+                console.log("✅ Dữ liệu trả về từ DB:", resultData);
+
+                // Trả về mảng
+                return Array.isArray(resultData) ? resultData : [];
             } catch (error) {
-                console.error('Lỗi khi kiểm tra mã nhân viên hàng loạt:', error);
-                throw error;
+                console.error('❌ Lỗi khi gọi API check trùng mã:', error.response?.data || error.message);
+                return [];
             }
         },
 

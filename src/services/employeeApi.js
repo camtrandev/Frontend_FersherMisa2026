@@ -46,15 +46,18 @@ const employeeApi = {
     },
     
     checkDuplicateCode(employeeCode) {
-        // Có thể API yêu cầu truyền params, bạn điều chỉnh lại key cho khớp với Backend nếu cần nhé
         return axios.get(`${API_BASE_URL}/Employees/check-duplicate-code`, {
             params: { employeeCode }
         });
     },
 
+    
     checkDuplicateCodesList(codes) {
-        // Sử dụng POST để gửi mảng dữ liệu (Array) qua Body
-        return api.post(`${BASE_URL}/check-duplicate-codes`, codes);
+        return axios.post(`${API_BASE_URL}/Employees/check-duplicate-codes`, JSON.stringify(codes), {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
     },
     
     updateStatus(data) {

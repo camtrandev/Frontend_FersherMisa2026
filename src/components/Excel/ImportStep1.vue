@@ -68,6 +68,7 @@
 import { ref } from 'vue';
 import * as XLSX from 'xlsx';
 
+// Định nghĩa 2 sự kiện bắn ra ngoài cho file cha biết
 const emit = defineEmits(['file-loaded', 'file-cleared']);
 
 const fileName = ref('');
@@ -87,33 +88,31 @@ const handleFileUpload = (event) => {
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
 
-        // Đọc dữ liệu theo mảng 2 chiều
         const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
         const rawData = [];
-        // Chạy từ i = 1 để bỏ qua dòng 0 (dòng tiêu đề)
         for (let i = 1; i < jsonData.length; i++) {
             const row = jsonData[i];
             if (!row || row.length === 0) continue;
 
-            // Ánh xạ ĐÚNG CHUẨN index dựa trên file Excel mẫu
             rawData.push({
-                employeeCode: row[0] ? String(row[0]).trim() : '',       // Cột A (0): Mã NV
-                fullName: row[1] ? String(row[1]).trim() : '',           // Cột B (1): Tên NV
-                genderName: row[2] ? String(row[2]).trim() : '',         // Cột C (2): Giới tính
-                dateOfBirth: row[3] ? String(row[3]).trim() : '',        // Cột D (3): Ngày sinh
-                identityNumber: row[4] ? String(row[4]).trim() : '',     // Cột E (4): Số CMND/CCCD
-                positionName: row[8] ? String(row[8]).trim() : '',       // Cột I (8): Chức danh
-                departmentCode: row[9] ? String(row[9]).trim() : '',     // Cột J (9): Mã đơn vị
-                departmentName: row[10] ? String(row[10]).trim() : '',   // Cột K (10): Tên đơn vị
-                bankAccountNumber: row[20] ? String(row[20]).trim() : '',// Cột U (20): Số tài khoản
-                bankName: row[21] ? String(row[21]).trim() : '',         // Cột V (21): Tên ngân hàng
+                employeeCode: row[0] ? String(row[0]).trim() : '',
+                fullName: row[1] ? String(row[1]).trim() : '',
+                genderName: row[2] ? String(row[2]).trim() : '',
+                dateOfBirth: row[3] ? String(row[3]).trim() : '',
+                identityNumber: row[4] ? String(row[4]).trim() : '',
+                positionName: row[8] ? String(row[8]).trim() : '',
+                departmentCode: row[9] ? String(row[9]).trim() : '',
+                departmentName: row[10] ? String(row[10]).trim() : '',
+                bankAccountNumber: row[20] ? String(row[20]).trim() : '',
+                bankName: row[21] ? String(row[21]).trim() : '',
 
                 status: '',
                 errorMsg: ''
             });
         }
 
+        // Báo cho file cha biết là đã có data
         emit('file-loaded', rawData);
     };
     reader.readAsArrayBuffer(file);
@@ -123,6 +122,7 @@ const clearFile = () => {
     fileName.value = '';
     fileSize.value = '';
     document.getElementById('fileUpload').value = '';
+    // Báo cho file cha biết là đã xóa file
     emit('file-cleared');
 };
 </script>
@@ -164,6 +164,11 @@ const clearFile = () => {
     position: relative;
 }
 
+.has-file {
+    border: 1px solid #2ca01c;
+}
+
+/* Đổi viền xanh khi có file */
 .file-input-hidden {
     position: absolute;
     top: 0;

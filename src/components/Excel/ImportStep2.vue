@@ -1,5 +1,11 @@
 <template>
-    <div class="step-content">
+    <div class="step-content" style="position: relative; min-height: 400px;">
+
+        <div v-if="isLoading" class="m-loading-overlay">
+            <div class="m-spinner"></div>
+            <div class="m-loading-text">Đang kiểm tra dữ liệu với hệ thống...</div>
+        </div>
+
         <div class="validation-summary">
             <div style="color: #00a54f; font-weight: 600;">1. Có {{ validCount }} nhân viên đủ điều kiện</div>
             <div style="color: #e5a326; font-weight: 600;">2. Có {{ missingCount }} nhân viên thiếu trường Mã / Mã Đơn
@@ -50,13 +56,18 @@
                         <td class="freeze-col" style="left: 180px; color: #ed1c24; font-size: 13px;">{{ row.errorMsg }}
                         </td>
 
-                        <td><input type="text" v-model="row.employeeCode" @blur="validateAll" class="m-input-td" /></td>
-                        <td><input type="text" v-model="row.fullName" class="m-input-td" /></td>
-                        <td><input type="text" v-model="row.genderName" class="m-input-td" /></td>
-                        <td><input type="text" v-model="row.dateOfBirth" class="m-input-td" /></td>
-                        <td><input type="text" v-model="row.positionName" class="m-input-td" /></td>
-                        <td><input type="text" v-model="row.departmentCode" @blur="validateAll" class="m-input-td" /></td>
-                        <td><input type="text" v-model="row.departmentName" class="m-input-td" /></td>
+                        <td><input type="text" v-model="row.employeeCode" @blur="validateAll" class="m-input-td"
+                                :disabled="isLoading" /></td>
+                        <td><input type="text" v-model="row.fullName" class="m-input-td" :disabled="isLoading" /></td>
+                        <td><input type="text" v-model="row.genderName" class="m-input-td" :disabled="isLoading" /></td>
+                        <td><input type="text" v-model="row.dateOfBirth" class="m-input-td" :disabled="isLoading" />
+                        </td>
+                        <td><input type="text" v-model="row.positionName" class="m-input-td" :disabled="isLoading" />
+                        </td>
+                        <td><input type="text" v-model="row.departmentCode" @blur="validateAll" class="m-input-td"
+                                :disabled="isLoading" /></td>
+                        <td><input type="text" v-model="row.departmentName" class="m-input-td" :disabled="isLoading" />
+                        </td>
                     </tr>
                 </tbody>
             </table>
@@ -64,7 +75,7 @@
 
         <div style="display: flex; justify-content: space-between; margin-top: 12px; font-size: 13px;">
             <div>Tổng số: <b>{{ filteredData.length }}</b> bản ghi</div>
-            <button class="m-btn-util" @click="validateAll">
+            <button class="m-btn-util" @click="validateAll" :disabled="isLoading">
                 <span style="color: #0075c0; font-weight: bold;">✔ Kiểm tra lại dữ liệu</span>
             </button>
         </div>
@@ -72,13 +83,16 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
-import { useEmployeeStore } from '../../stores/Employee.store'; // Nhớ check đúng đường dẫn
+import { ref, computed, onMounted } from 'vue';
+import { useEmployeeStore } from '../../stores/Employee.store';
 
 const props = defineProps({ tableData: Array });
 const emit = defineEmits(['validation-done']);
 
 const employeeStore = useEmployeeStore();
+
+// Biến trạng thái để bật/tắt Vòng tròn Load
+const isLoading = ref(false);
 
 const validCount = ref(0);
 const missingCount = ref(0);
@@ -99,77 +113,151 @@ const getRowClass = (status) => {
 };
 
 // ==========================================
-// HÀM KIỂM TRA ĐIỀU KIỆN
-// ==========================================
-// ==========================================
-// HÀM KIỂM TRA ĐIỀU KIỆN (ĐÃ GHÉP API HÀNG LOẠT)
+// HÀM KIỂM TRA ĐIỀU KIỆN (CÓ CHẶN LOADING)
 // ==========================================
 const validateAll = async () => {
-    validCount.value = 0;
-    missingCount.value = 0;
-    duplicateCount.value = 0;
-
-    // 1. Lấy mã phòng ban
-    let depts = employeeStore.departments;
-    if (!depts || depts.length === 0) {
-        depts = await employeeStore.fetchAllDepartments();
+    if (!props.tableData || props.tableData.length === 0) {
+        console.warn("Dữ liệu bảng chưa sẵn sàng!");
+        return;
     }
-    const deptCodes = depts.map(d => d.departmentCode.toLowerCase());
 
-    // 2. Gom mã để check hàng loạt
-    const allCodes = props.tableData
-        .filter(row => row.employeeCode && String(row.employeeCode).trim() !== '')
-        .map(row => String(row.employeeCode).trim());
+    // BẬT LOADING KHI BẮT ĐẦU KIỂM TRA
+    isLoading.value = true;
 
-    // 🔴 SỬA LỖI Ở ĐÂY: API trả về List<string> (các mã trùng)
-    let duplicatedCodesFromServer = [];
     try {
-        // Giả sử API trả về mảng ["NV001", "NV002"]
-        duplicatedCodesFromServer = await employeeStore.checkDuplicateCodesList(allCodes);
+        validCount.value = 0;
+        missingCount.value = 0;
+        duplicateCount.value = 0;
+
+        // 1. Lấy danh sách mã phòng ban để kiểm tra
+        let depts = employeeStore.departments || [];
+        if (depts.length === 0) {
+            depts = await employeeStore.fetchAllDepartments() || [];
+        }
+        const deptCodes = depts.map(d => String(d.departmentCode).toLowerCase());
+
+        // 2. Gom tất cả mã NV từ bảng
+        const allCodes = props.tableData
+            .filter(row => row && row.employeeCode)
+            .map(row => String(row.employeeCode).trim());
+
+        // LOG REQUEST
+        console.group("🚀 [API REQUEST] KIỂM TRA TRÙNG MÃ HÀNG LOẠT");
+        console.log("Payload gửi đi (Mảng string):", JSON.parse(JSON.stringify(allCodes)));
+        console.groupEnd();
+
+        // 3. Gọi API lấy kết quả
+        let checkResults = [];
+        if (allCodes.length > 0) {
+            const res = await employeeStore.checkDuplicateCodesList(allCodes);
+            checkResults = Array.isArray(res) ? res : [];
+            console.log("✅ [API RESPONSE] Dữ liệu từ DB trả về:", checkResults);
+        }
+
+        // 4. Quét từng dòng để bôi màu
+        for (let row of props.tableData) {
+            if (!row) continue;
+
+            row.status = 'valid';
+            row.errorMsg = '';
+            const currentCode = String(row.employeeCode || '').trim();
+
+            // Kiểm tra thiếu mã (Màu Vàng)
+            if (!currentCode) {
+                row.status = 'missing';
+                row.errorMsg = 'Mã nhân viên không được để trống.';
+                missingCount.value++;
+                continue;
+            }
+
+            // Kiểm tra thiếu/sai phòng ban (Màu Vàng)
+            if (!row.departmentCode || !deptCodes.includes(String(row.departmentCode).trim().toLowerCase())) {
+                row.status = 'missing';
+                row.errorMsg = `Mã đơn vị không tồn tại trong hệ thống.`;
+                missingCount.value++;
+                continue;
+            }
+
+            // 🔴 KIỂM TRA TRÙNG MÃ (Màu Đỏ)
+            const isDuplicated = checkResults.find(item => item && String(item.employeeCode).trim() === currentCode);
+
+            // isValid === false nghĩa là mã ĐÃ TỒN TẠI ở DB
+            if (isDuplicated && isDuplicated.isValid === false) {
+                row.status = 'duplicate';
+                row.errorMsg = `Mã nhân viên <${currentCode}> đã tồn tại.`;
+                duplicateCount.value++;
+                continue;
+            }
+
+            // Vượt qua hết lỗi -> Xanh lá
+            validCount.value++;
+        }
+
+        emit('validation-done', validCount.value);
     } catch (error) {
-        console.error("Lỗi gọi API:", error);
+        console.error("❌ Lỗi trong quá trình kiểm tra:", error);
+    } finally {
+        // TẮT LOADING KHI CHẠY XONG DÙ THÀNH CÔNG HAY LỖI
+        isLoading.value = false;
     }
-
-    // 3. Vòng lặp xử lý
-    for (let row of props.tableData) {
-        row.status = 'valid';
-        row.errorMsg = '';
-        const currentCode = String(row.employeeCode || '').trim();
-
-        // Kiểm tra thiếu mã (Vàng)
-        if (!currentCode) {
-            row.status = 'missing';
-            row.errorMsg = 'Mã nhân viên không được để trống.';
-            missingCount.value++;
-            continue;
-        }
-
-        // Kiểm tra phòng ban (Vàng)
-        if (!row.departmentCode || !deptCodes.includes(String(row.departmentCode).trim().toLowerCase())) {
-            row.status = 'missing';
-            row.errorMsg = `Mã đơn vị <${row.departmentCode}> không tồn tại.`;
-            missingCount.value++;
-            continue;
-        }
-
-        // 🔴 SỬA LỖI Ở ĐÂY: Kiểm tra trong mảng string trả về
-        if (duplicatedCodesFromServer.includes(currentCode)) {
-            row.status = 'duplicate'; // (Đỏ)
-            row.errorMsg = `Mã nhân viên <${currentCode}> đã tồn tại.`;
-            duplicateCount.value++;
-            continue;
-        }
-
-        validCount.value++;
-    }
-
-    emit('validation-done', validCount.value);
 };
 
+// Gọi hàm ngay khi Component vừa được mount (Bật sang bước 2)
+onMounted(() => {
+    validateAll();
+});
+
+// Expose để component Cha có thể gọi được
 defineExpose({ validateAll });
 </script>
 
 <style scoped>
+/* =======================================
+   CSS CHO HIỆU ỨNG LOADING OVERLAY
+   ======================================= */
+.m-loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.7);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 999;
+}
+
+.m-spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #2ca01c;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin-bottom: 12px;
+}
+
+.m-loading-text {
+    font-size: 14px;
+    color: #2ca01c;
+    font-weight: 600;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* =======================================
+   CSS CHO BẢNG VÀ GIAO DIỆN
+   ======================================= */
 .validation-summary {
     margin-bottom: 12px;
     line-height: 1.8;
@@ -253,12 +341,22 @@ defineExpose({ validateAll });
     background: #fff;
 }
 
+.m-input-td:disabled {
+    background-color: transparent;
+    color: #999;
+}
+
 .m-btn-util {
     border: 1px solid #e0e0e0;
     background: #fff;
     padding: 6px 16px;
     border-radius: 4px;
     cursor: pointer;
+}
+
+.m-btn-util:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .m-select {
