@@ -171,7 +171,9 @@ const searchQuery = ref('');
 const activeFilters = ref({});
 let searchTimeout = null;
 
-const tableColumns = ref([
+const COLUMN_STORAGE_KEY = 'MISA_EMPLOYEE_COLUMNS_CONFIG';
+
+const defaultColumns = [
     { label: 'Mã nhân viên', field: 'employeeCode', width: '130px', alignClass: 'text-left', filterable: true },
     { label: 'Tên nhân viên', field: 'fullName', width: '220px', alignClass: 'text-left', filterable: true },
     { label: 'Mã số thuế', field: 'taxCode', width: '130px', alignClass: 'text-left', filterable: true },
@@ -194,7 +196,49 @@ const tableColumns = ref([
     { label: 'Ngày sửa', field: 'modifiedDate', width: '120px', alignClass: 'text-center' },
     { label: 'Người sửa', field: 'modifiedBy', width: '150px', alignClass: 'text-left' },
     { label: 'Trạng thái', field: 'status', width: '150px', alignClass: 'text-left', filterable: true }
-]);
+];
+
+const tableColumns = ref([]);
+
+
+const loadColumnConfig = () => {
+    const savedConfig = localStorage.getItem(COLUMN_STORAGE_KEY);
+    
+    if (savedConfig) {
+        try {
+            const parsedCols = JSON.parse(savedConfig);
+            const mergedCols = [];
+            
+            // Lắp ráp lại mảng theo thứ tự đã lưu trong Storage
+            parsedCols.forEach(savedCol => {
+                const baseCol = defaultColumns.find(c => c.field === savedCol.field);
+                if (baseCol) {
+                    // Ghi đè các thuộc tính đã sửa (visible, width, label...) lên cột gốc
+                    mergedCols.push({ ...baseCol, ...savedCol });
+                }
+            });
+            
+            // Xử lý an toàn: Nếu code mới có thêm cột mà Storage cũ chưa có, tự động gắn nó vào cuối
+            defaultColumns.forEach(baseCol => {
+                if (!mergedCols.find(c => c.field === baseCol.field)) {
+                    mergedCols.push(baseCol);
+                }
+            });
+            
+            tableColumns.value = mergedCols;
+            return;
+        } catch (error) {
+            console.error("Lỗi khi đọc cấu hình Local Storage, quay về mặc định:", error);
+        }
+    }
+    
+    // Nếu chưa lưu bao giờ, dùng luôn mảng mặc định
+    tableColumns.value = [...defaultColumns];
+};
+
+loadColumnConfig();
+
+
 
 // ẩn hiển thị cột
 
@@ -450,8 +494,15 @@ const handleExportExcel = async () => {
 
 const handlePageChange = (page) => { currentPage.value = page; };
 const handlePageSizeChange = (size) => { pageSize.value = size; currentPage.value = 1; };
-const handleApplyColumnSettings = (newColumns) => { tableColumns.value = [...newColumns]; };
 
+// 3. Hàm kích hoạt khi bấm nút "Cất" từ Popup Tùy chỉnh cột
+const handleApplyColumnSettings = (newColumns) => {
+    // Cập nhật giao diện ngay lập tức
+    tableColumns.value = [...newColumns];
+    
+    //  LƯU VÀO LOCAL STORAGE để lần sau F5 không bị mất
+    localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(newColumns));
+};
 // chuyển value thành String an toàn trước khi trim()
 const onApplyFilter = ({ field, value, operator }) => {
     const newFilters = { ...activeFilters.value };

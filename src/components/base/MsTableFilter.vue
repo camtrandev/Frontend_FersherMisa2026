@@ -38,10 +38,11 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted} from 'vue';
 
 const props = defineProps({
-    column: { type: Object, required: true }
+    column: { type: Object, required: true },
+    currentFilter: { type: Object, default: () => ({ value: '', operator: 'contains' }) }
 });
 
 const emit = defineEmits(['onFilter', 'onClear', 'close']);
@@ -58,9 +59,9 @@ const operators = [
     { label: 'Kết thúc với', value: 'ends_with' }
 ];
 
-const selectedOperator = ref(operators[4]); // Mặc định 'Chứa'
+const selectedOperator = ref(operators.find(op => op.value === props.currentFilter.operator) || operators[4]);
+const filterValue = ref(props.currentFilter.value || '');
 const showOperatorDropdown = ref(false);
-const filterValue = ref('');
 
 const selectOperator = (op) => {
     selectedOperator.value = op;

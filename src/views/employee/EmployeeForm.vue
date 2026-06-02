@@ -333,7 +333,7 @@
 </template>
 
 <script setup>
-import { ref, watch, computed, onMounted, onUnmounted } from 'vue';
+import { ref, watch, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useEmployeeStore } from '../../stores/Employee.store';
 
 const props = defineProps({
@@ -351,12 +351,14 @@ const isCustomer = ref(false);
 const isVendor = ref(false);
 const activeTab = ref(1);
 
-const focusCodeInput = async () => {
-    await nextTick(); 
-    if (inputCode.value) {
-        inputCode.value.focus();
-        inputCode.value.select();
-    }
+// ✅ Code cần sửa thành: Bỏ await đi và dùng nextTick như một callback
+const focusCodeInput = () => {
+    nextTick(() => {
+        if (inputCode.value) {
+            inputCode.value.focus();
+            inputCode.value.select(); // Hàm này để bôi đen toàn bộ text trong ô
+        }
+    });
 };
 
 
@@ -822,6 +824,16 @@ watch(
         focusCodeInput();
     },
     { immediate: true }
+);
+
+watch(
+    () => props.isVisible,
+    (newValue) => {
+        if (newValue) {
+            // Khi form mở ra (Dù là Thêm mới hay Sửa), tiến hành focus vào ô Mã
+            focusCodeInput();
+        }
+    }
 );
 
 

@@ -16,8 +16,9 @@
                             :class="{ 'active': activeFilterCol === col.field }" @click.stop="toggleFilter(col.field)">
                         </div>
 
-                        <MsTableFilter v-if="activeFilterCol === col.field" :column="col" @onFilter="handlePassFilter"
-                            @onClear="handlePassClear" @close="activeFilterCol = null" />
+                        <MsTableFilter v-if="activeFilterCol === col.field" :column="col"
+                            :currentFilter="filterStates[col.field] || { value: '', operator: 'contains' }"
+                            @onFilter="handlePassFilter" @onClear="handlePassClear" @close="activeFilterCol = null" />
                     </th>
 
                     <th class="th-action text-center">Chức năng</th>
@@ -73,7 +74,8 @@
                         <ul v-if="activeDropdown === rowIndex" class="dropdown-menu" :class="{ 'dropup': isDropUp }">
                             <li class="dropdown-item" @click.stop="handleAction('Nhân bản', row)">Nhân bản</li>
                             <li class="dropdown-item" @click.stop="handleAction('Xóa', row)">Xóa</li>
-                            <li class="dropdown-item" @click.stop="handleAction('Ngừng sử dụng', row)">Ngừng sử dụng </li>
+                            <li class="dropdown-item" @click.stop="handleAction('Ngừng sử dụng', row)">Ngừng sử dụng
+                            </li>
                         </ul>
                     </td>
                 </tr>
@@ -110,6 +112,8 @@ const emit = defineEmits(['filter-data', 'onDeleteRow', 'onEditRow', 'update:sel
 
 const activeDropdown = ref(null);
 const activeFilterCol = ref(null);
+
+const filterStates = ref({});
 
 // Thêm biến kiểm soát hướng mở của Dropdown
 const isDropUp = ref(false);
@@ -174,9 +178,22 @@ const toggleSelectRow = (id, isChecked) => {
 };
 
 const toggleFilter = (field) => { activeFilterCol.value = (activeFilterCol.value === field) ? null : field; };
+
 const closeFilter = () => { activeFilterCol.value = null; };
-const handlePassFilter = (filterData) => { emit('filter-data', filterData); };
-const handlePassClear = (field) => { emit('filter-data', { field: field, value: '' }); };
+const handlePassFilter = (filterData) => {
+    filterStates.value[filterData.field] = {
+        value: filterData.value,
+        operator: filterData.operator
+    };
+    emit('filter-data', filterData);
+};
+
+
+const handlePassClear = (field) => {
+    delete filterStates.value[field]; // Xóa khỏi bộ nhớ
+    emit('filter-data', { field: field, value: '', operator: 'contains' });
+};
+
 
 const closeAllPopovers = () => { closeDropdown(); closeFilter(); };
 onMounted(() => window.addEventListener('click', closeAllPopovers));
@@ -382,9 +399,12 @@ const formatDate = (dateString) => {
 
 /* THÊM ĐOẠN NÀY DÀNH RIÊNG CHO CÁC DÒNG CUỐI BẢNG */
 .dropdown-menu.dropup {
-    top: auto;        /* Hủy bỏ neo phía trên */
-    bottom: 90%;      /* Neo menu mọc ngược từ dưới lên */
-    box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.1); /* Đảo ngược bóng đổ cho đẹp */
+    top: auto;
+    /* Hủy bỏ neo phía trên */
+    bottom: 90%;
+    /* Neo menu mọc ngược từ dưới lên */
+    box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.1);
+    /* Đảo ngược bóng đổ cho đẹp */
 }
 
 .dropdown-item {
