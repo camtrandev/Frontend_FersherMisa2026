@@ -136,6 +136,7 @@ import ImportExcelDialog from '../../components/Excel/ImportExcelDialog.vue';
 
 // --- KHỞI TẠO STORE & GIỮ TÍNH PHẢN XẠ (REACTIVITY) ---
 const employeeStore = useEmployeeStore();
+
 const { employees, totalRecords, isLoading } = storeToRefs(employeeStore);
 
 // -- trang thái ImportExcel --- 
@@ -426,6 +427,7 @@ onMounted(() => window.addEventListener('click', closeBatchMenu));
 onUnmounted(() => window.removeEventListener('click', closeBatchMenu));
 
 // 1. Kích hoạt Xóa 1 bản ghi
+
 const openDeleteDialog = (employeeData) => {
     employeeToDelete.value = employeeData;
     confirmActionType.value = 'single_delete'; // Xác định là xóa 1
@@ -446,14 +448,14 @@ const executeConfirmedAction = async () => {
             const targetId = employeeToDelete.value.employeeId || employeeToDelete.value.employeeCode;
             await employeeStore.removeEmployee(targetId);
 
-            // 👇 BỔ SUNG ĐOẠN NÀY ĐỂ GỌI API ĐỔI TRẠNG THÁI ĐƠN LẺ 👇
+            //  BỔ SUNG ĐOẠN NÀY ĐỂ GỌI API ĐỔI TRẠNG THÁI ĐƠN LẺ 
         } else if (confirmActionType.value === 'single_stop_using' || confirmActionType.value === 'single_start_using') {
             // Tận dụng API hàng loạt nhưng nhét duy nhất 1 cái ID vào mảng
             await employeeStore.changeEmployeeStatus({
                 ids: [employeeToDelete.value.employeeId],
                 status: employeeToDelete.value.targetStatus
             });
-            // 👆 KẾT THÚC BỔ SUNG 👆
+            // KẾT THÚC BỔ SUNG 
 
         } else if (confirmActionType.value === 'batch_delete') {
             await employeeStore.removeMultipleEmployees(selectedEmployeeIds.value);

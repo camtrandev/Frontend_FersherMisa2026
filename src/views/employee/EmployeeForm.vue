@@ -351,7 +351,7 @@ const isCustomer = ref(false);
 const isVendor = ref(false);
 const activeTab = ref(1);
 
-// ✅ Code cần sửa thành: Bỏ await đi và dùng nextTick như một callback
+// dùng nextTick như một callback
 const focusCodeInput = () => {
     nextTick(() => {
         if (inputCode.value) {
@@ -636,7 +636,7 @@ const formatToDateString = (dateString) => {
 
 const saveForm = async (isSaveAndAdd) => {
     // =========================================================================
-    // 1. CHẠY VALIDATE TOÀN BỘ CÁC TRƯỜNG (Không dùng short-circuit)
+    // 1. CHẠY VALIDATE TOÀN BỘ CÁC TRƯỜNG 
     // =========================================================================
     const validationResults = [
         validateField('employeeCode'),
@@ -661,7 +661,7 @@ const saveForm = async (isSaveAndAdd) => {
     // 2. CHUẨN BỊ PAYLOAD (Ép kiểu chuẩn xác)
     // =========================================================================
     const payload = {
-        employeeCode: employee.value.employeeCode?.trim(),
+        employeeCode: employee.employeeCode?.trim(),
         fullName: employee.value.fullName?.trim(),
         departmentId: employee.value.departmentId,
         positionName: employee.value.positionName?.trim(),
@@ -695,7 +695,7 @@ const saveForm = async (isSaveAndAdd) => {
         email: employee.value.email?.trim(),
 
         // ================================================================
-        // MAP DANH SÁCH NGÂN HÀNG (Sửa lỗi 400 Bad Request)
+        // MAP DANH SÁCH NGÂN HÀNG 
         // ================================================================
         bankAccounts: bankAccounts.value
             .filter(b => b.accountNumber && b.accountNumber.trim() !== '') // Bỏ qua dòng trống
@@ -737,8 +737,7 @@ const saveForm = async (isSaveAndAdd) => {
     // =========================================================================
     // 4. GỌI API & XỬ LÝ KẾT QUẢ
     // =========================================================================
-    console.log(`🚀 ~ [HÀNH ĐỘNG]: ${payload.employeeId ? "SỬA (PUT)" : "THÊM MỚI (POST)"}`);
-    console.log("📦 ~ [PAYLOAD GỬI ĐI]:", payload);
+    
 
     try {
         if (payload.employeeId) {
@@ -762,7 +761,7 @@ const saveForm = async (isSaveAndAdd) => {
             }
         }
     } catch (error) {
-        console.error("❌ ~ [LỖI API]:", error.response?.data);
+        console.error(" ~ [LỖI API]:", error.response?.data);
 
         // Chuẩn hóa bắt lỗi theo cấu trúc Exception của MISA
         const responseData = error.response?.data;
