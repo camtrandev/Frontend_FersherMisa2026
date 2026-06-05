@@ -661,7 +661,7 @@ const saveForm = async (isSaveAndAdd) => {
     // 2. CHUẨN BỊ PAYLOAD (Ép kiểu chuẩn xác)
     // =========================================================================
     const payload = {
-        employeeCode: employee.employeeCode?.trim(),
+        employeeCode: employee.value.employeeCode?.trim(),
         fullName: employee.value.fullName?.trim(),
         departmentId: employee.value.departmentId,
         positionName: employee.value.positionName?.trim(),
@@ -719,6 +719,9 @@ const saveForm = async (isSaveAndAdd) => {
                 return bankItem;
             })
     };
+
+
+
 
     // =========================================================================
     // 3. SANITIZE DATA (Dọn rác dữ liệu - Chống lỗi 400 Bad Request của .NET)

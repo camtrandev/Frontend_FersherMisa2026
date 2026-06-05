@@ -88,7 +88,8 @@
     </div>
 </template>
 
-<script setup>
+
+ <script setup>
 // BỔ SUNG: Import thêm 'computed' từ 'vue'
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import MsCheckbox from './MsCheckbox.vue';
